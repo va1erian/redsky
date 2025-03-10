@@ -57,7 +57,7 @@ impl BskyActor {
                 }
             }
             Err(err) => {
-                println!("bsky actor: closed receiving can");
+                println!("bsky actor: closed receiving chan - {}", err);
                 false
             }
         }
@@ -79,6 +79,9 @@ impl BskyJob {
             BskyActorMsg::GetUserPosts { username } => {
                 self.get_user_posts(username).await
             }
+            BskyActorMsg::LoadImage { url } => {
+                self.load_image(url).await
+            }
             BskyActorMsg::Close() => {
                 panic!("unexpected message");
             }
@@ -95,6 +98,13 @@ impl BskyJob {
         self.ctx.request_repaint();
     }
 
+    async fn load_image(&self, url: &String) -> Result<RedskyUiMsg,  Box<dyn std::error::Error>> {
+        let resp = reqwest::get(url)
+        .await?;
+        let bytes = resp.bytes().await?;
+        Ok(RedskyUiMsg::NotifyImageLoaded { url: url.to_string(), data: bytes.to_vec().into() })
+    }
+
     async fn get_user_posts(&self, username: &String)  -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
         dbg!("get user posts");
         let at_uri = format!("at://{}", username);
@@ -105,17 +115,17 @@ impl BskyJob {
         .bsky
         .feed
         .get_author_feed(atrium_api::app::bsky::feed::get_author_feed::ParametersData {
-            actor: AtIdentifier::Handle(username.parse().unwrap()),
+            actor: AtIdentifier::Handle(username.parse()?),
             cursor: None,
             filter: None,
             include_pins: Some(true),
             limit: 20.try_into().ok()
-        }.into()).await.unwrap();
+        }.into()).await?;
 
         Ok(RedskyUiMsg::ShowUserPostsMsg{
             username: username.to_string(),
             posts: response.data.feed.iter().map(|post_el: &atrium_api::types::Object<atrium_api::app::bsky::feed::defs::FeedViewPostData>| {
-                let post_record_data = post::RecordData::try_from_unknown(post_el.clone().post.clone().data.record.clone()).unwrap();
+                let post_record_data = post::RecordData::try_from_unknown(post_el.post.data.record.clone()).unwrap();
                 let images : Vec<PostImage> = post_el.post.embed.clone().map(|embed_el: Union<atrium_api::app::bsky::feed::defs::PostViewEmbedRefs>| {
                     if let Union::Refs(PostViewEmbedRefs::AppBskyEmbedImagesView(data)) = embed_el {
                         data.images.iter().map(|img| 
@@ -130,10 +140,11 @@ impl BskyJob {
                 Post::new(
                         post_record_data.text,
                         post_el.post.author.handle.to_string(),
-                        post_el.post.author.display_name.clone()
-                        .or(Some("none".to_string())).unwrap(),
-                    images
-                )
+                        post_el.post.author.display_name.clone().unwrap_or_default(),
+                        post_el.post.indexed_at.as_str().to_string(),
+                        post_el.post.like_count.unwrap_or(0),
+                        images
+                     )
         }).collect()
         })
     }
@@ -150,7 +161,7 @@ impl BskyJob {
             algorithm: None,
             cursor: None,
             limit: 30.try_into().ok()
-        }.into()).await.unwrap();
+        }.into()).await?;
 
         Ok(RedskyUiMsg::RefreshTimelineMsg 
             { 
@@ -172,8 +183,10 @@ impl BskyJob {
                         feed_element.post.author.handle.to_string(),
                         feed_element.post.author.display_name.clone()
                         .or(Some("none".to_string())).unwrap(),
+                        feed_element.post.indexed_at.as_str().to_string(),
+                        feed_element.post.like_count.unwrap_or(0),
                         images
-                    )
+                        )
             }).collect()
         })
     }
@@ -197,7 +210,7 @@ impl BskyJob {
             tags: None,
             text: msg.to_string(),
         })
-        .await;
+        .await?;
         Ok(RedskyUiMsg::PostSucceeed())
     }
 }

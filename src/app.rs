@@ -1,5 +1,9 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
-
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
+use egui::load::Bytes;
+use egui::ImageSource;
 use egui::{RichText, Ui};
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
@@ -9,15 +13,19 @@ pub struct Post {
     content: String,
     author: String,
     display_name: String,
+    date: String,
+    like_count: i64,
     embeds: Vec<PostImage>
 }
 
 impl Post {
-    pub fn new(content: String, author: String, display_name: String, embeds: Vec<PostImage>) -> Self {
+    pub fn new(content: String, author: String, display_name: String, date: String, like_count: i64, embeds: Vec<PostImage>) -> Self {
         Post {
             content,
             author,
             display_name,
+            date,
+            like_count,
             embeds
         }
     }
@@ -43,6 +51,8 @@ impl PostImage {
 pub enum RedskyUiMsg {
     LogInSucceededMsg(),
     PostSucceeed(),
+    PrepareUserView{username: String},
+    NotifyImageLoaded{url: String, data: Arc<[u8]>},
     RefreshTimelineMsg{posts: Vec<Post>},
     ShowUserPostsMsg{username: String, posts: Vec<Post>},
     DropUserPostsMsg{username: String},
@@ -55,6 +65,7 @@ pub enum BskyActorMsg {
     Post {msg_body: String},
     GetTimeline(),
     GetUserPosts {username: String},
+    LoadImage{url: String},
     Close()
 }
 
@@ -70,7 +81,8 @@ pub struct RedskyApp {
     pass: String,
     msg: String,
     timeline: Vec<Post>,
-    user_posts: HashMap<String, Vec<Post>>
+    user_posts: HashMap<String, Option<Vec<Post>>>,
+    image_cache: HashMap<String, Arc<[u8]>>
 }
 
 impl RedskyApp {
@@ -89,27 +101,45 @@ impl RedskyApp {
             msg: String::new(),
             timeline: Vec::new(),
             user_posts: HashMap::new(),
+            image_cache: HashMap::new()
         }
     }
 }
 
 impl RedskyApp {
-    pub fn post_message(&self, msg: BskyActorMsg) -> () {
+    fn post_message(&self, msg: BskyActorMsg) -> () {
         let _ = self.tx.send(msg);
     }
 
-    pub fn process_message(&mut self, msg: RedskyUiMsg) -> () {
+    fn post_ui_message(&self, msg: RedskyUiMsg) -> () {
+        let _ = self.ui_tx.send(msg);
+    }
+
+    fn request_post_images(&self, posts: &Vec<Post>) {
+        for post in posts {
+            for embed in &post.embeds {
+                println!("requesting image {}", embed.thumbnail_url );
+                self.post_message(BskyActorMsg::LoadImage { url: embed.thumbnail_url.clone() });
+            }
+        }
+    }
+
+    fn process_message(&mut self, msg: RedskyUiMsg) -> () {
         
         match msg {
             RedskyUiMsg::PostSucceeed () => {
                 self.post_message(BskyActorMsg::GetTimeline());
             }
             RedskyUiMsg::RefreshTimelineMsg { posts } => {
-                dbg!(&posts);
+                self.request_post_images(&posts);
                 self.timeline = posts;
             }
+            RedskyUiMsg::PrepareUserView { username } => {
+                self.user_posts.insert(username, None);
+            }
             RedskyUiMsg::ShowUserPostsMsg { username, posts }  => {
-                self.user_posts.insert(username, posts);
+                self.request_post_images(&posts);
+                self.user_posts.insert(username, Some(posts));
             }
             RedskyUiMsg::DropUserPostsMsg { username } => {
                 self.user_posts.remove(&username);
@@ -122,26 +152,63 @@ impl RedskyApp {
                 self.is_logged_in = true;
                 self.post_message(BskyActorMsg::GetTimeline());
             }
+            RedskyUiMsg::NotifyImageLoaded { url, data } => {
+                self.image_cache.insert(url.clone(), data);
+                println!("image {} loaded", url);
+            }
         }
     }
 
-    pub fn make_post_view(&self, ui: &mut Ui, username: &str, posts: &Vec<Post>) {
+    fn make_placeholder_post_view(&self, ui: &mut Ui, username: &str) {
         ui.vertical(|ui| {
             ui.heading(username);
             ui.separator();
+                ui.spinner();
+        });
+    }
+
+    fn make_post_view(&self, ui: &mut Ui, username: &str, posts: &Vec<Post>) {
+        ui.vertical(|ui| {
+            ui.heading(username);
+            ui.separator();
+
             egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.vertical(|ui|  {
                         for post in posts {
                             ui.horizontal(|ui| {
                                 if ui.label(RichText::new(&post.display_name).strong()).clicked() {
+                                    self.post_ui_message(RedskyUiMsg::PrepareUserView { username: post.author.clone() });
                                     self.post_message(BskyActorMsg::GetUserPosts { username: post.author.clone() });
                                 };
                                 ui.label(&post.author);
                             });
+                            ui.label(RichText::new(&post.date).small());
                             ui.label( &post.content);
-                            for embed in &post.embeds {
-                                ui.image(embed.thumbnail_url.clone());
+                            if !&post.embeds.is_empty() {
+                                ui.horizontal_wrapped(|ui|{
+                                    ui.set_min_height(200f32);
+                                    for embed in &post.embeds {
+                                        if self.image_cache.contains_key(&embed.thumbnail_url) {
+                                            let mut s = DefaultHasher::new();
+                                            embed.thumbnail_url.hash(&mut s);
+                                            let hash = s.finish();
+                                            let img = self.image_cache.get(&embed.thumbnail_url).unwrap();
+                                            let image_id = format!("bytes://{}.jpg", hash);
+        
+                                            ui.image(ImageSource::Bytes { 
+                                                uri: Cow::from(image_id), 
+                                                bytes: Bytes::Shared(img.clone())
+                                            });
+                                            
+                                        } else {
+                                            ui.spinner();
+                                        }
+                                    }
+                                });
                             }
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{} x ❤", &post.like_count));
+                            });
                             ui.separator();
                         }
                     });
@@ -150,7 +217,7 @@ impl RedskyApp {
         });
     }
 
-    pub fn make_user_timelines_views(&self, ctx: &egui::Context) {
+    fn make_user_timelines_views(&self, ctx: &egui::Context) {
         for (username, posts) in &self.user_posts {
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(username),
@@ -164,7 +231,14 @@ impl RedskyApp {
                     );
 
                         egui::CentralPanel::default().show(ctx, |ui| {
-                            self.make_post_view(ui, username, posts);
+                            match posts {
+                                Some(posts) => {
+                                    self.make_post_view(ui, username, posts);
+                                }
+                                None => {
+                                    self.make_placeholder_post_view(ui, username);
+                                }
+                            }
                         });
 
                         if ctx.input(|i| i.viewport().close_requested()) {
@@ -174,18 +248,13 @@ impl RedskyApp {
         }
     }
 
-    pub fn make_login_window_view(&mut self, ctx: &egui::Context) {
+    fn make_login_window_view(&mut self, ctx: &egui::Context) {
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("__login"),
             egui::ViewportBuilder::default()
                 .with_title("Login to Bluesky")
-                .with_inner_size([200.0, 150.0]),
-            |ctx, class| {
-                assert!(
-                    class == egui::ViewportClass::Immediate,
-                    "This egui backend doesn't support multiple viewports"
-                );
-
+                .with_inner_size([200.0, 100.0]),
+            |ctx, _| {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("Welcome to Redsky");
                     ui.horizontal(|ui| {
@@ -199,7 +268,6 @@ impl RedskyApp {
                             .labelled_by(pwd_label.id);
                     });
                     ui.horizontal(|ui| {
-
                         if ui.button("login").clicked() {
                             self.post_message(BskyActorMsg::Login { login: self.login.to_string(), 
                                 pass:self.pass.to_string() });
@@ -208,12 +276,12 @@ impl RedskyApp {
                 });
 
                 if ctx.input(|i| i.viewport().close_requested()) {
-                    self.is_post_window_open = false;
+                    self.is_login_window_open = false;
                 }
             });
     }
 
-    pub fn make_new_post_view(&mut self, ctx: &egui::Context) { 
+    fn make_new_post_view(&mut self, ctx: &egui::Context) { 
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("__new_post"),
             egui::ViewportBuilder::default()
@@ -241,7 +309,7 @@ impl RedskyApp {
                 });
 
                 if ctx.input(|i| i.viewport().close_requested()) {
-                    self.is_login_window_open = false;
+                    self.is_post_window_open = false;
                 }
             });
 
@@ -251,6 +319,7 @@ impl RedskyApp {
 impl eframe::App for RedskyApp {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        
         if let Ok(msg) = self.rx.try_recv() {
             self.process_message(msg);
         }
@@ -289,8 +358,6 @@ impl eframe::App for RedskyApp {
             })
 
         });
-
-
     }
 }
 
