@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use egui::{RichText, Ui};
-use tokio::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub struct Post {
@@ -48,12 +49,13 @@ pub enum RedskyUiMsg {
     ShowErrorMsg{error: String}
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum BskyActorMsg {
     Login {login: String, pass: String},
     Post {msg_body: String},
     GetTimeline(),
-    GetUserPosts {username: String}
+    GetUserPosts {username: String},
+    Close()
 }
 
 pub struct RedskyApp {
@@ -93,10 +95,11 @@ impl RedskyApp {
 
 impl RedskyApp {
     pub fn post_message(&self, msg: BskyActorMsg) -> () {
-        let _ = self.tx.try_send(msg);
+        let _ = self.tx.send(msg);
     }
 
     pub fn process_message(&mut self, msg: RedskyUiMsg) -> () {
+        
         match msg {
             RedskyUiMsg::PostSucceeed () => {
                 self.post_message(BskyActorMsg::GetTimeline());
@@ -165,7 +168,7 @@ impl RedskyApp {
                         });
 
                         if ctx.input(|i| i.viewport().close_requested()) {
-                            self.ui_tx.try_send(RedskyUiMsg::DropUserPostsMsg { username: username.clone() }).unwrap();
+                            self.ui_tx.send(RedskyUiMsg::DropUserPostsMsg { username: username.clone() }).unwrap();
                         }
                 });
         }

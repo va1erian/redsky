@@ -1,3 +1,6 @@
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
+
 use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
 use atrium_api::app::bsky::feed::post;
 use atrium_api::types::string::AtIdentifier;
@@ -5,8 +8,6 @@ use atrium_api::types::string::Datetime;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
 use bsky_sdk::BskyAgent;
-use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::Sender;
 
 use crate::app::BskyActorMsg;
 use crate::app::Post;
@@ -18,52 +19,83 @@ pub struct BskyActor {
     tx: Sender<RedskyUiMsg>,
     rx: Receiver<BskyActorMsg>,
     bsky_agent: BskyAgent,
+    ctx: egui::Context
+}
+
+struct BskyJob {
+    job: BskyActorMsg,
+    tx: Sender<RedskyUiMsg>,
+    bsky_agent: BskyAgent,
     ctx: egui::Context, //for force repaint
 }
 
 impl BskyActor {
-    pub fn new(agent: BskyAgent, ctx: egui::Context, rx: Receiver<BskyActorMsg>, tx: Sender<RedskyUiMsg>) -> Self {
+    pub fn new(bsky_agent: BskyAgent, ctx: egui::Context, rx: Receiver<BskyActorMsg>, tx: Sender<RedskyUiMsg>) -> Self {
         Self {
             tx,
             rx,
-            bsky_agent: agent,
+            bsky_agent,
             ctx
         }
     }
 
-    pub fn post_to_ui(&self, msg: RedskyUiMsg) {
-        self.tx.try_send(msg).unwrap();
-        self.ctx.request_repaint();
-    }
-
-    pub async fn listen(&mut self) -> bool {
-        if let Some(msg) = self.rx.recv().await {
-            let result = match msg {
-                BskyActorMsg::Login { login, pass } => {
-                    self.login(login, pass).await
+    pub fn pump(&mut self) -> bool {
+        match self.rx.recv() {
+            Ok(msg) => {
+                if msg == BskyActorMsg::Close() {
+                    println!("bsky actor: closing");
+                    false
+                } else {
+                    let job = BskyJob {
+                        job: msg,
+                        tx: self.tx.clone(),
+                        bsky_agent: self.bsky_agent.clone(),
+                        ctx: self.ctx.clone()
+                    };
+                    tokio::spawn(job.perform());
+                    true
                 }
-                BskyActorMsg::Post { msg_body } => {
-                    self.post(msg_body).await
-                }
-                BskyActorMsg::GetTimeline() => {
-                    self.get_timeline_posts().await
-                }            
-                BskyActorMsg::GetUserPosts { username } => {
-                    self.get_user_posts(username).await
-                }
-            };
-            if let Ok(reply) = result {
-                self.post_to_ui(reply);
-            } else if let Err(e) = result {
-                self.post_to_ui(RedskyUiMsg::ShowErrorMsg { error: e.to_string() });
             }
-            true
-        } else {
-        false
+            Err(err) => {
+                println!("bsky actor: closed receiving can");
+                false
+            }
+        }
+    }
+}
+
+impl BskyJob {
+    pub async fn perform(self) -> () {
+        let result = match &self.job {
+            BskyActorMsg::Login { login, pass } => {
+                self.login(login, pass).await
+            }
+            BskyActorMsg::Post { msg_body } => {
+                self.post(msg_body).await
+            }
+            BskyActorMsg::GetTimeline() => {
+                self.get_timeline_posts().await
+            }            
+            BskyActorMsg::GetUserPosts { username } => {
+                self.get_user_posts(username).await
+            }
+            BskyActorMsg::Close() => {
+                panic!("unexpected message");
+            }
+        };
+        if let Ok(reply) = result {
+            self.post_to_ui(reply);
+        } else if let Err(e) = result {
+            self.post_to_ui(RedskyUiMsg::ShowErrorMsg { error: e.to_string() });
         }
     }
 
-    async fn get_user_posts(&self, username: String)  -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    pub fn post_to_ui(&self, msg: RedskyUiMsg) {
+        self.tx.send(msg).unwrap();
+        self.ctx.request_repaint();
+    }
+
+    async fn get_user_posts(&self, username: &String)  -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
         dbg!("get user posts");
         let at_uri = format!("at://{}", username);
         dbg!(&at_uri);
@@ -81,7 +113,7 @@ impl BskyActor {
         }.into()).await.unwrap();
 
         Ok(RedskyUiMsg::ShowUserPostsMsg{
-            username,
+            username: username.to_string(),
             posts: response.data.feed.iter().map(|post_el: &atrium_api::types::Object<atrium_api::app::bsky::feed::defs::FeedViewPostData>| {
                 let post_record_data = post::RecordData::try_from_unknown(post_el.clone().post.clone().data.record.clone()).unwrap();
                 let images : Vec<PostImage> = post_el.post.embed.clone().map(|embed_el: Union<atrium_api::app::bsky::feed::defs::PostViewEmbedRefs>| {
@@ -96,10 +128,10 @@ impl BskyActor {
                 }).into_iter().flatten().collect();
 
                 Post::new(
-                    post_el.post.author.display_name.clone()
-                        .or(Some("none".to_string())).unwrap(),
                         post_record_data.text,
                         post_el.post.author.handle.to_string(),
+                        post_el.post.author.display_name.clone()
+                        .or(Some("none".to_string())).unwrap(),
                     images
                 )
         }).collect()
@@ -146,13 +178,13 @@ impl BskyActor {
         })
     }
 
-    async fn login(&self, login: String, pass: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    async fn login(&self, login: &String, pass: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
         dbg!("loggin in");
         let _ = self.bsky_agent.login(login, pass).await?;
         Ok(RedskyUiMsg::LogInSucceededMsg())
     } 
 
-    async fn post(&self, msg: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error >> {
+    async fn post(&self, msg: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error >> {
         dbg!("post");
         let _ = self.bsky_agent.create_record(atrium_api::app::bsky::feed::post::RecordData {
             created_at: Datetime::now(),
@@ -163,7 +195,7 @@ impl BskyActor {
             langs: None,
             reply: None,
             tags: None,
-            text: msg,
+            text: msg.to_string(),
         })
         .await;
         Ok(RedskyUiMsg::PostSucceeed())
