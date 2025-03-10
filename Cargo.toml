@@ -5,7 +5,11 @@ edition = "2021"
 
 [dependencies]
 atrium-api = "0.25.0"
-egui = "0.30"
-eframe = "0.30"
+egui = "0.31.1"
+egui_extras = { version = "0.31.1", features = ["all_loaders"] }
+image = { version = "0.25.5", features = ["jpeg", "png", "webp"] } # Add the types you want support for
+eframe = "0.31.1"
 bsky-sdk = "0.1.16"
 tokio = { version = "1", features = ["full"] }
+tempfile = "3"
+
