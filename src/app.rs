@@ -1,10 +1,11 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use egui::load::Bytes;
-use egui::ImageSource;
+use egui::{Context, ImageSource};
 use egui::{RichText, Ui};
+use egui_extras::{Size, StripBuilder};
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
@@ -17,6 +18,16 @@ pub struct Post {
     like_count: i64,
     embeds: Vec<PostImage>
 }
+
+pub struct UserProfile {
+    pub handle: String,
+    pub display_name: String,
+    pub bio: String,
+    pub avatar_uri: String,
+    pub follower_count: i64,
+    pub follow_count: i64,
+    pub post_count: i64
+} 
 
 impl Post {
     pub fn new(content: String, author: String, display_name: String, date: String, like_count: i64, embeds: Vec<PostImage>) -> Self {
@@ -53,9 +64,12 @@ pub enum RedskyUiMsg {
     PostSucceeed(),
     PrepareUserView{username: String},
     NotifyImageLoaded{url: String, data: Arc<[u8]>},
+    ShowUserProfile{profile: UserProfile},
     RefreshTimelineMsg{posts: Vec<Post>},
     ShowUserPostsMsg{username: String, posts: Vec<Post>},
     DropUserPostsMsg{username: String},
+    ShowImageView {img_uri: String},
+    CloseImageView {img_uri: String}, 
     ShowErrorMsg{error: String}
 }
 
@@ -64,6 +78,7 @@ pub enum BskyActorMsg {
     Login {login: String, pass: String},
     Post {msg_body: String},
     GetTimeline(),
+    GetUserProfile{username: String},
     GetUserPosts {username: String},
     LoadImage{url: String},
     Close()
@@ -82,7 +97,6 @@ pub struct RedskyApp {
     rx: Receiver<RedskyUiMsg>,
 
     is_logged_in: bool,
-    is_login_window_open: bool,
     is_post_window_open: bool,
     main_view_state: MainViewState,
     login: String,
@@ -90,7 +104,9 @@ pub struct RedskyApp {
     msg: String,
     timeline: Vec<Post>,
     user_posts: HashMap<String, Option<Vec<Post>>>,
-    image_cache: HashMap<String, Arc<[u8]>>
+    user_infos_cache: HashMap<String, UserProfile>,
+    image_cache: HashMap<String, Arc<[u8]>>,
+    opened_image_views: HashSet<String>
 }
 
 impl RedskyApp {
@@ -102,7 +118,6 @@ impl RedskyApp {
             ui_tx,
             rx,
             is_logged_in: false,
-            is_login_window_open: true,
             is_post_window_open: false,
             main_view_state: MainViewState::Login,
             login: String::new(),
@@ -110,7 +125,9 @@ impl RedskyApp {
             msg: String::new(),
             timeline: Vec::new(),
             user_posts: HashMap::new(),
-            image_cache: HashMap::new()
+            user_infos_cache: HashMap::new(),
+            image_cache: HashMap::new(),
+            opened_image_views: HashSet::new()
         }
     }
 }
@@ -144,7 +161,13 @@ impl RedskyApp {
                 self.timeline = posts;
             }
             RedskyUiMsg::PrepareUserView { username } => {
-                self.user_posts.insert(username, None);
+                self.user_posts.insert(username.clone(), None);
+                self.post_message(BskyActorMsg::GetUserProfile { username });
+            }
+            RedskyUiMsg::ShowUserProfile { profile } => {
+                self.post_message(BskyActorMsg::LoadImage { url: profile.avatar_uri.clone() });
+                self.user_infos_cache.insert(profile.handle.clone(), profile.into());
+
             }
             RedskyUiMsg::ShowUserPostsMsg { username, posts }  => {
                 self.request_post_images(&posts);
@@ -157,28 +180,97 @@ impl RedskyApp {
                 print!("error: {}", error);
             }
             RedskyUiMsg::LogInSucceededMsg() => {
-                self.is_login_window_open = false;
                 self.is_logged_in = true;
                 self.main_view_state = MainViewState::OwnPostFeed;
                 self.post_message(BskyActorMsg::GetUserPosts{username: self.login.clone()});
+                self.post_message(BskyActorMsg::GetUserProfile { username: self.login.clone() });
                 self.post_message(BskyActorMsg::GetTimeline());
             }
             RedskyUiMsg::NotifyImageLoaded { url, data } => {
                 self.image_cache.insert(url.clone(), data);
                 println!("image {} loaded", url);
             }
+            RedskyUiMsg::ShowImageView { img_uri }  => {
+                self.opened_image_views.insert(img_uri.clone());
+                self.post_message(BskyActorMsg::LoadImage { url: img_uri });
+            }
+            RedskyUiMsg::CloseImageView { img_uri } => {
+                self.opened_image_views.remove(&img_uri);
+            }
+        }
+    }
+
+    fn make_maybe_user_profile_view(&self, ui: &mut Ui, username: &str, maybe_profile: Option<&UserProfile>) {
+        match maybe_profile {
+            Some(profile) => {
+                ui.horizontal(|ui| {
+                    ui.set_max_height(100f32);
+                    match self.image_cache.get(&profile.avatar_uri) {
+                        Some(img) => {
+                            let mut s = DefaultHasher::new();
+                            profile.avatar_uri.hash(&mut s);
+                            let hash = s.finish();
+                            let image_id = format!("bytes://{}.jpg", hash);
+
+                                ui.vertical(|ui| {
+                                    ui.set_max_width(100f32);
+                                    ui.set_max_height(100f32);    
+                                    ui.image(ImageSource::Bytes { 
+                                        uri: Cow::from(image_id), 
+                                        bytes: Bytes::Shared(img.clone())
+                                    });
+                                });
+                        }
+                        None => {
+                            ui.vertical(|ui| {
+                                ui.set_max_width(100f32);
+                                ui.set_max_height(100f32);    
+                                ui.spinner();
+                            });
+                        }
+                    }
+                    ui.vertical(|ui|{
+                        ui.set_max_height(100f32);
+                        ui.heading(&profile.display_name);
+                        ui.small(&profile.handle);
+                        ui.label(&profile.bio);
+                        ui.label(format!("{} post(s), {} follower(s), {} follow(s)",
+                            &profile.post_count, &profile.follower_count, &profile.follow_count));
+                    });
+                    ui.allocate_space(ui.available_size());
+                });
+            }
+            None => {
+                ui.label(username);
+                ui.spinner();
+            }
         }
     }
 
     fn make_maybe_user_post_view(&self, ui: &mut Ui, username: &str, posts: &Option<Vec<Post>>) {
-        match posts {
-            Some(posts) => {
-                self.make_post_view(ui, username, posts);
-            }
-            None => {
-                self.make_placeholder_post_view(ui, username);
-            }
-        }
+        StripBuilder::new(ui)
+        .size(Size::exact(100.0))
+        .size(Size::remainder())
+        .vertical(|mut strip| {
+            strip.cell(|ui| {
+                self.make_maybe_user_profile_view(ui, username, self.user_infos_cache.get(username));
+                ui.separator();
+            });
+            strip.strip(|builder| {
+                builder.sizes(Size::remainder(), 1).horizontal(|mut strip| {
+                    strip.cell(|ui| {
+                        match posts {
+                            Some(posts) => {
+                                self.make_post_view(ui, username, posts);
+                            }
+                            None => {
+                                self.make_placeholder_post_view(ui, username);
+                            }
+                        }
+                    }); 
+                });
+            });
+        });
     }
 
     fn make_placeholder_post_view(&self, ui: &mut Ui, username: &str) {
@@ -189,16 +281,34 @@ impl RedskyApp {
         });
     }
 
-    fn make_post_view(&self, ui: &mut Ui, username: &str, posts: &Vec<Post>) {
-        ui.vertical(|ui| {
-            ui.heading(username);
-            ui.separator();
+    fn make_buffer_image_view(&self, ui: &mut Ui, image_uri: &String, full_view_uri: Option<&String>) {
+        let mut s = DefaultHasher::new();
+        image_uri.hash(&mut s);
+        let hash = s.finish();
+        let img = self.image_cache.get(image_uri).unwrap();
+        let image_id = format!("bytes://{}.jpg", hash);
 
+        let img_view = ui.image(ImageSource::Bytes { 
+            uri: Cow::from(image_id), 
+            bytes: Bytes::Shared(img.clone())
+        });
+        let sensing_img = img_view.interact(egui::Sense::click());
+
+        if sensing_img.clicked() {
+            if let Some(uri) = full_view_uri {
+                dbg!(uri);
+                self.post_ui_message(RedskyUiMsg::ShowImageView { img_uri: uri.clone() });
+            }
+        }
+    }
+
+    fn make_post_view(&self, ui: &mut Ui, _username: &str, posts: &Vec<Post>) {
+        ui.vertical_centered_justified(|ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.vertical(|ui|  {
                         for post in posts {
                             ui.horizontal(|ui| {
-                                if ui.label(RichText::new(&post.display_name).strong()).clicked() {
+                                if ui.link(RichText::new(&post.display_name).strong()).clicked() {
                                     self.post_ui_message(RedskyUiMsg::PrepareUserView { username: post.author.clone() });
                                     self.post_message(BskyActorMsg::GetUserPosts { username: post.author.clone() });
                                 };
@@ -207,26 +317,17 @@ impl RedskyApp {
                             ui.label(RichText::new(&post.date).small());
                             ui.label( &post.content);
                             if !&post.embeds.is_empty() {
-                                ui.horizontal_wrapped(|ui|{
+                                if ui.horizontal_wrapped(|ui|{
                                     ui.set_min_height(200f32);
                                     for embed in &post.embeds {
                                         if self.image_cache.contains_key(&embed.thumbnail_url) {
-                                            let mut s = DefaultHasher::new();
-                                            embed.thumbnail_url.hash(&mut s);
-                                            let hash = s.finish();
-                                            let img = self.image_cache.get(&embed.thumbnail_url).unwrap();
-                                            let image_id = format!("bytes://{}.jpg", hash);
-        
-                                            ui.image(ImageSource::Bytes { 
-                                                uri: Cow::from(image_id), 
-                                                bytes: Bytes::Shared(img.clone())
-                                            });
-                                            
+                                            self.make_buffer_image_view(ui, &embed.thumbnail_url, Some(&embed.url));
                                         } else {
                                             ui.spinner();
                                         }
                                     }
-                                });
+                                }).response.clicked() {
+                                };
                             }
                             ui.horizontal(|ui| {
                                 ui.label(format!("{} x ❤", &post.like_count));
@@ -235,7 +336,7 @@ impl RedskyApp {
                         }
                     });
     
-                });
+            });
         });
     }
 
@@ -253,6 +354,33 @@ impl RedskyApp {
 
                     if ctx.input(|i| i.viewport().close_requested()) {
                         self.ui_tx.send(RedskyUiMsg::DropUserPostsMsg { username: username.clone() }).unwrap();
+                    }
+                });
+        }
+    }
+
+    fn make_image_viewports(&self, ctx: &egui::Context) {
+        for img in &self.opened_image_views  {
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of(img),
+                egui::ViewportBuilder::default()
+                    .with_title(format!("Viewing {}", img))
+                    .with_inner_size([800.0, 600.0]),
+                |ctx, _| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        egui::ScrollArea::both().show(ui, |ui| {
+                            ui.centered_and_justified(|ui| {
+                                if self.image_cache.contains_key(img) {
+                                    self.make_buffer_image_view(ui, img, None);
+                                } else {
+                                    ui.spinner();
+                                }
+                            });
+                        });
+                    });
+
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        self.ui_tx.send(RedskyUiMsg::CloseImageView { img_uri: img.clone() }).unwrap();
                     }
                 });
         }
@@ -297,7 +425,8 @@ impl eframe::App for RedskyApp {
         }
         
         self.make_user_timelines_views(ctx);
-
+        self.make_image_viewports(ctx);
+        
         if self.is_post_window_open {
             self.make_new_post_view(ctx);
         }
@@ -306,9 +435,6 @@ impl eframe::App for RedskyApp {
             ui.vertical(|ui | {
                 egui::menu::bar(ui, |ui| {
                     ui.menu_button("File", |ui| {
-                        if ui.button("Login...").clicked() {
-                            self.is_login_window_open = true;
-                        }
                         if ui.button("New post...").clicked() {
                             self.is_post_window_open = true;
                         }
@@ -330,6 +456,7 @@ impl eframe::App for RedskyApp {
                         ui.centered_and_justified(|ui| {
                             ui.vertical_centered_justified(|ui| {
                                 ui.heading("Welcome to Redsky");
+                                ui.separator();
                                 ui.horizontal(|ui| {
                                     let name_label = ui.label("bsky handle: ");
                                     ui.text_edit_singleline(&mut self.login)

@@ -13,6 +13,7 @@ use crate::app::BskyActorMsg;
 use crate::app::Post;
 use crate::app::PostImage;
 use crate::app::RedskyUiMsg;
+use crate::app::UserProfile;
 
 
 pub struct BskyActor {
@@ -76,6 +77,9 @@ impl BskyJob {
             BskyActorMsg::GetTimeline() => {
                 self.get_timeline_posts().await
             }            
+            BskyActorMsg::GetUserProfile { username } => {
+                self.get_user_profile(username).await
+            }
             BskyActorMsg::GetUserPosts { username } => {
                 self.get_user_posts(username).await
             }
@@ -147,6 +151,30 @@ impl BskyJob {
                      )
         }).collect()
         })
+    }
+
+    async fn get_user_profile(&self, username: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+        dbg!("get user profile", &username);
+
+        let profile = self.bsky_agent
+        .api
+        .app
+        .bsky
+        .actor
+        .get_profile(atrium_api::app::bsky::actor::get_profile::ParametersData{
+            actor: AtIdentifier::Handle(username.parse()?)
+        }.into()).await?;
+
+        Ok(RedskyUiMsg::ShowUserProfile { 
+            profile: UserProfile {
+                handle: username.clone(),
+                display_name: profile.display_name.clone().unwrap_or("(no display name)".to_string()),
+                bio: profile.description.clone().unwrap_or("(No bio)".to_string()),
+                avatar_uri: profile.avatar.clone().unwrap_or("".to_string()),
+                follower_count: profile.followers_count.unwrap_or_default(),
+                follow_count: profile.follows_count.unwrap_or_default(),
+                post_count: profile.posts_count.unwrap_or_default()
+        }})
     }
 
     async fn get_timeline_posts(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
