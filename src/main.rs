@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             //spawn actor thread with tokio enabled
             std::thread::spawn(move || {
-                let rt = Runtime::new().expect("Unable to create Runtime");
+                let rt = Runtime::new().expect("Unable to create tokio runtime");
                 let _enter = rt.enter();
                 let agent = match rt.block_on(BskyAgent::builder().build()) {
                     Err(e) => panic!("{}", e),
