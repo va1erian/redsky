@@ -1,14 +1,18 @@
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
-use atrium_api::app::bsky::actor::profile;
+use atrium_api::app::bsky::embed::record::ViewRecord;
+use atrium_api::app::bsky::embed::record::ViewRecordRefs;
+use atrium_api::app::bsky::embed::video;
+use atrium_api::app::bsky::feed::defs::PostViewData;
 use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
-use atrium_api::app::bsky::feed::defs::ThreadViewPost;
+use atrium_api::app::bsky::feed::defs::ThreadViewPostData;
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
 use atrium_api::types::string::AtIdentifier;
 use atrium_api::types::string::Datetime;
+use atrium_api::types::Object;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
 use bsky_sdk::BskyAgent;
@@ -67,6 +71,64 @@ impl BskyActor {
                 false
             }
         }
+    }
+}
+
+fn extract_quote_reply(post_view: &Object<PostViewData> ) -> Option<Post> {
+    if let Some(Union::Refs(PostViewEmbedRefs::AppBskyEmbedRecordView(embedded_record))) = &post_view.embed {
+        if let Union::Refs(ViewRecordRefs::ViewRecord(view_record )) = &embedded_record.record {
+            let quote_post_data = post::RecordData::try_from_unknown(view_record.value.clone()).unwrap();
+            Some(Post{
+                uri: view_record.uri.clone(),
+                cid: view_record.cid.clone(),
+                content: quote_post_data.text,
+                author: view_record.author.handle.to_string(),
+                display_name: view_record.author.display_name.clone().unwrap_or("".to_string()),
+                avatar_img: view_record.author.avatar.clone().unwrap_or("".to_string()),
+                date: quote_post_data.created_at.as_str().to_string(),
+                like_count: view_record.like_count.unwrap_or(0),
+                repost_count: view_record.repost_count.unwrap_or(0),
+                embeds: vec![],
+                quoted_post: None
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn extract_images(post_view: &Object<PostViewData>) -> Vec<PostImage> {
+    post_view.embed.clone().map(|embed_el: Union<atrium_api::app::bsky::feed::defs::PostViewEmbedRefs>| {
+        if let Union::Refs(PostViewEmbedRefs::AppBskyEmbedImagesView(data)) = embed_el {
+            data.images.iter().map(|img| 
+                PostImage::new( img.thumb.to_string(),img.fullsize.to_string(),img.alt.to_string())
+                
+            ).collect()
+        } else {
+            vec![]
+        }
+    }).into_iter().flatten().collect()
+}
+
+fn extract_post(post_view: &Object<PostViewData>) -> Post {
+    let post_record_data = post::RecordData::try_from_unknown(post_view.data.record.clone()).unwrap();
+    let images : Vec<PostImage> = extract_images(post_view);
+    let quoted_post: Option<Post> = extract_quote_reply(post_view);
+
+    Post {
+        uri: post_view.uri.clone(),
+        cid: post_view.cid.clone(),
+        content: post_record_data.text.clone(),
+        author: post_view.author.handle.to_string(),
+        display_name: post_view.author.display_name.clone().unwrap_or_default(),
+        avatar_img: post_view.author.avatar.clone().unwrap_or("".to_string()),
+        date: post_record_data.created_at.as_str().to_string(),
+        like_count: post_view.like_count.unwrap_or(0),
+        repost_count: post_view.repost_count.unwrap_or(0),
+        embeds: images,
+        quoted_post: quoted_post.map(|post| Box::new(post))
     }
 }
 
@@ -159,52 +221,14 @@ impl BskyJob {
         }.into()).await?;
 
         if let atrium_api::types::Union::Refs(
-            OutputThreadRefs::AppBskyFeedDefsThreadViewPost(post_data)) = response.data.thread {
-            let post_record_data = post::RecordData::try_from_unknown(post_data.post.record.clone()).unwrap();
-            let images : Vec<PostImage> = post_data.post.embed.clone().map(|embed_el: Union<atrium_api::app::bsky::feed::defs::PostViewEmbedRefs>| {
-                if let Union::Refs(PostViewEmbedRefs::AppBskyEmbedImagesView(data)) = embed_el {
-                    data.images.iter().map(|img| 
-                        PostImage::new( img.thumb.to_string(),img.fullsize.to_string(),img.alt.to_string())
-                        
-                    ).collect()
-                } else {
-                    vec![]
-                }
-            }).into_iter().flatten().collect();
-
+            OutputThreadRefs::AppBskyFeedDefsThreadViewPost(post_data)) = &response.data.thread {
             let replies = match &post_data.replies {
                 Some(reply_list) => {
                     reply_list.iter().map(|reply| {
                         match reply {
                             Union::Refs(maybe_reply) => {
                                 if let ThreadViewPostRepliesItem::ThreadViewPost(view) = maybe_reply {
-                                    let images : Vec<PostImage> = view.post.embed.clone().map(|embed_el: Union<atrium_api::app::bsky::feed::defs::PostViewEmbedRefs>| {
-
-                                        if let Union::Refs(PostViewEmbedRefs::AppBskyEmbedImagesView(data)) = embed_el {
-                                            data.images.iter().map(|img| 
-                                                PostImage::new( img.thumb.to_string(),img.fullsize.to_string(),img.alt.to_string())
-                                                
-                                            ).collect()
-                                        } else {
-                                            vec![]
-                                        }
-                                    }).into_iter().flatten().collect();
-                                    let reply_record: post::RecordData = post::RecordData::try_from_unknown(view.post.record.clone()).unwrap();
-
-                                    vec![
-                                        Post {
-                                            uri: view.post.uri.clone(),
-                                            cid: view.post.cid.clone(),
-                                            content: reply_record.text.clone(),
-                                            author: view.post.author.handle.to_string(),
-                                            display_name: view.post.author.display_name.clone().unwrap_or_default(),
-                                            avatar_img: view.post.author.avatar.clone().unwrap_or("".to_string()),
-                                            date: reply_record.created_at.as_str().to_string(),
-                                            like_count: view.post.like_count.unwrap_or(0),
-                                            repost_count: view.post.repost_count.unwrap_or(0),
-                                            embeds: images
-                                        }
-                                    ]
+                                    vec![extract_post(&view.post)]
                                 } else {
                                     vec![]
                                 }
@@ -221,18 +245,7 @@ impl BskyJob {
             };
 
             Ok(RedskyUiMsg::NotifyPostAndRepliesLoaded { 
-                post: Post {
-                    uri: post_data.post.uri.clone(),
-                    cid: post_data.post.cid.clone(),
-                    content: post_record_data.text.clone(),
-                    author: post_data.post.author.handle.to_string(),
-                    display_name: post_data.post.author.display_name.clone().unwrap_or_default(),
-                    avatar_img: post_data.post.author.avatar.clone().unwrap_or("".to_string()),
-                    date: post_record_data.created_at.as_str().to_string(),
-                    like_count: post_data.post.like_count.unwrap_or(0),
-                    repost_count: post_data.post.repost_count.unwrap_or(0),
-                    embeds: images
-                }, 
+                post: extract_post(&post_data.post), 
                 replies
             })
         } else {
@@ -267,30 +280,7 @@ impl BskyJob {
         Ok(RedskyUiMsg::ShowUserPostsMsg{
             username: username.to_string(),
             posts: response.data.feed.iter().map(|post_el: &atrium_api::types::Object<atrium_api::app::bsky::feed::defs::FeedViewPostData>| {
-                let post_record_data = post::RecordData::try_from_unknown(post_el.post.data.record.clone()).unwrap();
-                let images : Vec<PostImage> = post_el.post.embed.clone().map(|embed_el: Union<atrium_api::app::bsky::feed::defs::PostViewEmbedRefs>| {
-                    if let Union::Refs(PostViewEmbedRefs::AppBskyEmbedImagesView(data)) = embed_el {
-                        data.images.iter().map(|img| 
-                            PostImage::new( img.thumb.to_string(),img.fullsize.to_string(),img.alt.to_string())
-                            
-                        ).collect()
-                    } else {
-                        vec![]
-                    }
-                }).into_iter().flatten().collect();
-
-                Post {
-                    uri: post_el.post.uri.clone(),
-                    cid: post_el.post.cid.clone(),
-                    content: post_record_data.text.clone(),
-                    author: post_el.post.author.handle.to_string(),
-                    display_name: post_el.post.author.display_name.clone().unwrap_or_default(),
-                    avatar_img: post_el.post.author.avatar.clone().unwrap_or("".to_string()),
-                    date: post_record_data.created_at.as_str().to_string(),
-                    like_count: post_el.post.like_count.unwrap_or(0),
-                    repost_count: post_el.post.repost_count.unwrap_or(0),
-                    embeds: images
-                }
+                extract_post(&post_el.post)
         }).collect()
         })
     }
@@ -336,30 +326,7 @@ impl BskyJob {
         Ok(RedskyUiMsg::RefreshTimelineMsg 
             { 
                 posts: posts.data.feed.iter().map(|feed_element| {
-                    let post = post::RecordData::try_from_unknown(feed_element.data.post.data.record.clone()).unwrap();
-                    let images : Vec<PostImage> = feed_element.post.embed.clone().map(|embed_el: Union<atrium_api::app::bsky::feed::defs::PostViewEmbedRefs>| {
-                        if let Union::Refs(PostViewEmbedRefs::AppBskyEmbedImagesView(data)) = embed_el {
-                            data.images.iter().map(|img| 
-                                PostImage::new( img.thumb.to_string(),img.fullsize.to_string(),img.alt.to_string())
-                                
-                            ).collect()
-                        } else {
-                            vec![]
-                        }
-                    }).into_iter().flatten().collect();
-        
-                    Post {
-                        uri: feed_element.post.uri.clone(),
-                        cid: feed_element.post.cid.clone(),
-                        content: post.text.clone(),
-                        author: feed_element.post.author.handle.to_string(),
-                        display_name: feed_element.post.author.display_name.clone().unwrap_or_default(),
-                        avatar_img: feed_element.post.author.avatar.clone().unwrap_or("".to_string()),
-                        date: post.created_at.as_str().to_string(),
-                        like_count: feed_element.post.like_count.unwrap_or(0),
-                        repost_count: feed_element.post.repost_count.unwrap_or(0),
-                        embeds: images
-                    }
+                   extract_post(&feed_element.post)
             }).collect()
         })
     }

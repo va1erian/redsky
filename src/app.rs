@@ -28,7 +28,8 @@ pub struct Post {
     pub date: String,
     pub like_count: i64,
     pub repost_count: i64,
-    pub embeds: Vec<PostImage>
+    pub embeds: Vec<PostImage>,
+    pub quoted_post: Option<Box<Post>>
 }
 
 pub struct UserProfile {
@@ -350,33 +351,50 @@ impl RedskyApp {
 
     }
 
+    fn make_post_inner_view(&self, ui: &mut Ui, post: &Post) {
+        ui.horizontal(|ui| {
+            ui.set_min_height(48f32);
+            if self.image_cache.contains_key(&post.avatar_img) {
+                self.make_buffer_image_view(ui, &post.avatar_img, 
+                    self.image_cache.get(&post.avatar_img).unwrap(),
+                     Some(&post.avatar_img));                                    
+                    
+            }
+
+            ui.vertical(|ui| {
+                if ui.link(RichText::new(&post.display_name).strong()).clicked() {
+                    self.post_ui_message(RedskyUiMsg::PrepareUserView { username: post.author.clone() });
+                    self.post_message(BskyActorMsg::GetUserPosts { username: post.author.clone() });
+                };
+                ui.label(&post.author);
+                ui.label(RichText::new(&post.date).small())
+            });
+
+        });
+        ui.style_mut().spacing.item_spacing = vec2(16.0, 16.0);
+        ui.label(&post.content);
+    }
+
+
     fn make_post_view(&self, ui: &mut Ui, _username: &str, posts: &Vec<Post>) {
         ui.vertical_centered_justified(|ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.vertical(|ui|  {
                         for post in posts {
                             let post_block = ui.vertical(|ui|  {
-                                ui.horizontal(|ui| {
-                                    ui.set_min_height(48f32);
-                                    if self.image_cache.contains_key(&post.avatar_img) {
-                                        self.make_buffer_image_view(ui, &post.avatar_img, 
-                                            self.image_cache.get(&post.avatar_img).unwrap(),
-                                             Some(&post.avatar_img));                                    
-                                            
-                                    }
+                                self.make_post_inner_view(ui, post);
 
-                                    ui.vertical(|ui| {
-                                        if ui.link(RichText::new(&post.display_name).strong()).clicked() {
-                                            self.post_ui_message(RedskyUiMsg::PrepareUserView { username: post.author.clone() });
-                                            self.post_message(BskyActorMsg::GetUserPosts { username: post.author.clone() });
-                                        };
-                                        ui.label(&post.author);
-                                        ui.label(RichText::new(&post.date).small())
-                                    });
+                                if let Some(quoted_post) = &post.quoted_post {
+                                    egui::Frame::new()
+                                        .inner_margin(8)
+                                        .outer_margin(8)
+                                        .corner_radius(8)
+                                        .stroke(egui::Stroke::new(1.0, egui::Color32::GRAY))
+                                        .show(ui, |ui| {
+                                            self.make_post_inner_view(ui, &quoted_post);
+                                        });       
+                               }
 
-                                });
-                                ui.style_mut().spacing.item_spacing = vec2(16.0, 16.0);
-                                ui.label(&post.content);
                                 if !&post.embeds.is_empty() {
                                     if ui.horizontal_wrapped(|ui|{
                                         ui.set_min_height(200f32);
@@ -610,8 +628,6 @@ impl eframe::App for RedskyApp {
                         }
                     }
                 }
-
-
             })
 
         });
