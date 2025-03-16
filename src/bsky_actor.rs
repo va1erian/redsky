@@ -1,12 +1,9 @@
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
-use atrium_api::app::bsky::embed::record::ViewRecord;
 use atrium_api::app::bsky::embed::record::ViewRecordRefs;
-use atrium_api::app::bsky::embed::video;
 use atrium_api::app::bsky::feed::defs::PostViewData;
 use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
-use atrium_api::app::bsky::feed::defs::ThreadViewPostData;
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
@@ -144,9 +141,9 @@ impl BskyJob {
             BskyActorMsg::GetPostAndReplies { post_ref } => {
                 self.get_post_thread(post_ref).await
             }
-            BskyActorMsg::GetPostLikers {post_ref } => {
-                self.get_post_likers(post_ref).await
-            }
+            //BskyActorMsg::GetPostLikers {post_ref } => {
+            //    self.get_post_likers(post_ref).await
+            //}
             BskyActorMsg::GetTimeline() => {
                 self.get_timeline_posts().await
             }            

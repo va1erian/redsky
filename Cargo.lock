@@ -2947,6 +2947,7 @@ dependencies = [
  "bsky-sdk",
  "eframe",
  "egui",
+ "egui-wgpu",
  "egui_extras",
  "image",
  "reqwest",

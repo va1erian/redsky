@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::iter;
 use std::sync::Arc;
 use atrium_api::types::string::Cid;
 use egui::load::Bytes;
-use egui::{vec2, Context, ImageSource, Sense};
+use egui::{vec2, ImageSource, Sense};
 use egui::{RichText, Ui};
 use egui_extras::{Size, StripBuilder};
 use std::sync::mpsc::Receiver;
@@ -83,7 +82,7 @@ pub enum BskyActorMsg {
     Login {login: String, pass: String},
     Post {msg_body: String},
     GetTimeline(),
-    GetPostLikers {post_ref: StrongRef},
+    //GetPostLikers {post_ref: StrongRef},
     GetPostAndReplies {post_ref: StrongRef},
     GetUserProfile{username: String},
     GetUserPosts {username: String},
@@ -153,17 +152,26 @@ impl RedskyApp {
         let _ = self.ui_tx.send(msg);
     }
 
+    fn request_image(&mut self, img_url: &str) {
+        if let None = self.image_cache.get(img_url) {
+            println!("requesting image {}", img_url);
+            self.image_cache.insert(img_url.to_string(), None);
+            self.post_message(BskyActorMsg::LoadImage { url: img_url.to_string()});
+        }
+    }
+
     fn request_post_images(&mut self, posts: &Vec<Post>) {
         for post in posts {
-            println!("requesting avatar {}", &post.avatar_img );
-            self.image_cache.insert(post.avatar_img.clone(), None);
-            self.post_message(BskyActorMsg::LoadImage { url: post.avatar_img.clone()});
+            self.request_image(&post.avatar_img );
+
+            if let Some(quoted_post) = &post.quoted_post {
+                self.request_image(&quoted_post.avatar_img);
+            }
 
             for embed in &post.embeds {
-                println!("requesting image {}", &embed.thumbnail_url );
-                self.image_cache.insert(embed.thumbnail_url.clone(), None);
-                self.post_message(BskyActorMsg::LoadImage { url: embed.thumbnail_url.clone()});
+                self.request_image(&embed.thumbnail_url );
             }
+
         }
     }
 
@@ -409,9 +417,9 @@ impl RedskyApp {
                                     };
                                 }
                                 ui.horizontal(|ui| {
-                                    ui.button(format!("{} x ❤", &post.like_count));
-                                    ui.button(format!("{} x 🔃", &post.repost_count));                                
-                                    ui.button("…");
+                                    let _ = ui.button(format!("{} x ❤", &post.like_count));
+                                    let _ = ui.button(format!("{} x 🔃", &post.repost_count));                                
+                                    let _ = ui.button("…");
                                 });
                                 ui.separator();
                             });
@@ -545,7 +553,8 @@ impl eframe::App for RedskyApp {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         
-        if let Ok(msg) = self.rx.try_recv() {
+
+        while let Ok(msg) = self.rx.try_recv() {
             self.process_message(msg);
         }
         
@@ -577,8 +586,8 @@ impl eframe::App for RedskyApp {
                             ui.selectable_value(&mut self.main_view_state, 
                                 MainViewState::OwnPostFeed, RichText::new("Profile").heading());
                             ui.selectable_value(&mut self.main_view_state,
-                                MainViewState::TimelineFeed, RichText::new("Timeline feed").heading());
-                        });
+                                MainViewState::TimelineFeed, RichText::new("Timeline feed").heading())
+                            });
                         ui.separator();
                     });
                 }
