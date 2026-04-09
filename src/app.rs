@@ -333,7 +333,7 @@ impl RedskyApp {
         match maybe_profile {
             Some(profile) => {
                 ui.horizontal(|ui| {
-                    ui.set_max_height(100f32);
+                    ui.set_max_height(120f32);
                     match self.image_cache.get(&profile.avatar_uri) {
                         Some(Some(img)) => {
                             let mut s = DefaultHasher::new();
@@ -342,8 +342,8 @@ impl RedskyApp {
                             let image_id = format!("bytes://{}.jpg", hash);
 
                                 ui.vertical(|ui| {
-                                    ui.set_max_width(100f32);
-                                    ui.set_max_height(100f32);    
+                                    ui.set_max_width(120f32);
+                                    ui.set_max_height(120f32);
                                     ui.image(ImageSource::Bytes { 
                                         uri: Cow::from(image_id), 
                                         bytes: Bytes::Shared(img.clone())
@@ -352,8 +352,8 @@ impl RedskyApp {
                         }
                         Some(None) => {
                             ui.vertical(|ui| {
-                                ui.set_max_width(100f32);
-                                ui.set_max_height(100f32);    
+                                ui.set_max_width(120f32);
+                                ui.set_max_height(120f32);
                                 ui.spinner();
                             });
                         }
@@ -362,7 +362,7 @@ impl RedskyApp {
                         }
                     }
                     ui.vertical(|ui|{
-                        ui.set_max_height(100f32);
+                        ui.set_max_height(120f32);
                         ui.heading(&profile.display_name);
                         ui.small(&profile.handle);
                         ui.label(&profile.bio);
@@ -381,7 +381,7 @@ impl RedskyApp {
 
     fn make_maybe_user_post_view(&self, ui: &mut Ui, username: &str, posts: &Option<Vec<Post>>) {
         StripBuilder::new(ui)
-        .size(Size::exact(100.0))
+        .size(Size::exact(120.0))
         .size(Size::remainder())
         .vertical(|mut strip| {
             strip.cell(|ui| {
@@ -441,12 +441,14 @@ impl RedskyApp {
 
     fn make_post_inner_view(&self, ui: &mut Ui, post: &Post) {
         ui.horizontal(|ui| {
-            ui.set_min_height(48f32);
+            ui.set_min_height(57.6f32);
             if self.image_cache.contains_key(&post.avatar_img) {
-                self.make_buffer_image_view(ui, &post.avatar_img, 
-                    self.image_cache.get(&post.avatar_img).unwrap(),
-                     Some(&post.avatar_img));                                    
-                    
+                ui.vertical(|ui| {
+                    ui.set_max_width(57.6f32);
+                    self.make_buffer_image_view(ui, &post.avatar_img,
+                        self.image_cache.get(&post.avatar_img).unwrap(),
+                         Some(&post.avatar_img));
+                });
             }
 
             ui.vertical(|ui| {
@@ -765,22 +767,24 @@ impl RedskyApp {
                         }
                         ui.separator();
 
+                        let mut clicked_profile = None;
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             for profile in &self.search_results {
-                                let (rect, response) = ui.allocate_at_least(vec2(ui.available_width(), 48.0), Sense::click());
+                                let (rect, response) = ui.allocate_at_least(vec2(ui.available_width(), 57.6), Sense::click());
                                 if response.hovered() {
                                     ui.painter().rect_filled(rect, 4.0, egui::Color32::from_gray(64));
                                 }
                                 if response.clicked() {
-                                    self.post_ui_message(RedskyUiMsg::PrepareUserView { username: profile.handle.clone() });
-                                    self.post_message(BskyActorMsg::GetUserPosts { username: profile.handle.clone() });
-                                    self.is_search_window_open = false;
+                                    clicked_profile = Some(profile.clone());
                                 }
 
                                 let mut child_ui = ui.new_child(UiBuilder::new().max_rect(rect).layout(Layout::left_to_right(Align::Center)));
                                 child_ui.horizontal(|ui| {
                                     ui.add_space(4.0);
-                                    self.make_buffer_image_view(ui, &profile.avatar_uri, self.image_cache.get(&profile.avatar_uri).unwrap_or(&None), None);
+                                    ui.vertical(|ui| {
+                                        ui.set_max_width(57.6f32);
+                                        self.make_buffer_image_view(ui, &profile.avatar_uri, self.image_cache.get(&profile.avatar_uri).unwrap_or(&None), None);
+                                    });
                                     ui.vertical(|ui| {
                                         ui.label(RichText::new(&profile.display_name).strong());
                                         ui.small(&profile.handle);
@@ -788,6 +792,11 @@ impl RedskyApp {
                                 });
                             }
                         });
+                        if let Some(profile) = clicked_profile {
+                            self.post_ui_message(RedskyUiMsg::PrepareUserView { username: profile.handle.clone() });
+                            self.post_message(BskyActorMsg::GetUserPosts { username: profile.handle.clone() });
+                            self.is_search_window_open = false;
+                        }
                     });
                 });
 
