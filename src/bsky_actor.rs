@@ -7,26 +7,32 @@ use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
-use atrium_api::types::string::AtIdentifier;
+use atrium_api::types::AtIdentifier;
 use atrium_api::types::string::Datetime;
+use atrium_api::types::string::Handle;
 use atrium_api::types::Object;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
 use bsky_sdk::BskyAgent;
 
 use crate::app::BskyActorMsg;
+use crate::app::DownloadStatus;
 use crate::app::Post;
 use crate::app::PostImage;
 use crate::app::RedskyUiMsg;
 use crate::app::StrongRef;
 use crate::app::UserProfile;
+use reqwest;
+use std::collections::HashMap;
+use tokio::sync::oneshot;
 
 
 pub struct BskyActor {
     tx: Sender<RedskyUiMsg>,
     rx: Receiver<BskyActorMsg>,
     bsky_agent: BskyAgent,
-    ctx: egui::Context
+    ctx: egui::Context,
+    cancel_txs: HashMap<u64, oneshot::Sender<()>>,
 }
 
 struct BskyJob {
@@ -42,25 +48,54 @@ impl BskyActor {
             tx,
             rx,
             bsky_agent,
-            ctx
+            ctx,
+            cancel_txs: HashMap::new(),
         }
     }
 
     pub fn pump(&mut self) -> bool {
         match self.rx.recv() {
             Ok(msg) => {
-                if msg == BskyActorMsg::Close() {
-                    println!("bsky actor: closing");
-                    false
-                } else {
-                    let job = BskyJob {
-                        job: msg,
-                        tx: self.tx.clone(),
-                        bsky_agent: self.bsky_agent.clone(),
-                        ctx: self.ctx.clone()
-                    };
-                    tokio::spawn(job.perform());
-                    true
+                match msg {
+                    BskyActorMsg::Close() => {
+                        println!("bsky actor: closing");
+                        false
+                    }
+                    BskyActorMsg::CancelImageDownload { id } => {
+                        if let Some(tx) = self.cancel_txs.remove(&id) {
+                            let _ = tx.send(());
+                        }
+                        true
+                    }
+                    BskyActorMsg::StartImageDownload { id, username, path } => {
+                        let (tx, rx) = oneshot::channel();
+                        self.cancel_txs.insert(id, tx);
+                        let job = BskyJob {
+                            job: BskyActorMsg::StartImageDownload { id, username, path },
+                            tx: self.tx.clone(),
+                            bsky_agent: self.bsky_agent.clone(),
+                            ctx: self.ctx.clone()
+                        };
+                        tokio::spawn(async move {
+                            tokio::select! {
+                                _ = job.perform() => {},
+                                _ = rx => {
+                                    println!("Job {} cancelled", id);
+                                }
+                            }
+                        });
+                        true
+                    }
+                    _ => {
+                        let job = BskyJob {
+                            job: msg,
+                            tx: self.tx.clone(),
+                            bsky_agent: self.bsky_agent.clone(),
+                            ctx: self.ctx.clone()
+                        };
+                        tokio::spawn(job.perform());
+                        true
+                    }
                 }
             }
             Err(err) => {
@@ -155,6 +190,12 @@ impl BskyJob {
             }
             BskyActorMsg::LoadImage { url } => {
                 self.load_image(url).await
+            }
+            BskyActorMsg::StartImageDownload { id, username, path } => {
+                self.download_all_images(*id, username, path).await
+            }
+            BskyActorMsg::CancelImageDownload { .. } => {
+                Ok(RedskyUiMsg::LogInSucceededMsg()) // dummy
             }
             BskyActorMsg::Close() => {
                 panic!("unexpected message");
@@ -267,7 +308,7 @@ impl BskyJob {
         .bsky
         .feed
         .get_author_feed(atrium_api::app::bsky::feed::get_author_feed::ParametersData {
-            actor: AtIdentifier::Handle(username.parse()?),
+            actor: AtIdentifier::Handle(username.parse().map_err(|e| format!("Invalid handle: {}", e))?),
             cursor: None,
             filter: None,
             include_pins: Some(true),
@@ -291,7 +332,7 @@ impl BskyJob {
         .bsky
         .actor
         .get_profile(atrium_api::app::bsky::actor::get_profile::ParametersData{
-            actor: AtIdentifier::Handle(username.parse()?)
+            actor: AtIdentifier::Handle(username.parse().map_err(|e| format!("Invalid handle: {}", e))?)
         }.into()).await?;
 
         Ok(RedskyUiMsg::ShowUserProfile { 
@@ -333,6 +374,111 @@ impl BskyJob {
         let _ = self.bsky_agent.login(login, pass).await?;
         Ok(RedskyUiMsg::LogInSucceededMsg())
     } 
+
+    async fn download_all_images(&self, id: u64, username: &String, path: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+        let mut all_posts = Vec::new();
+        let mut cursor = None;
+
+        // 1. Scan all posts
+        loop {
+            let response = self.bsky_agent
+                .api
+                .app
+                .bsky
+                .feed
+                .get_author_feed(atrium_api::app::bsky::feed::get_author_feed::ParametersData {
+                    actor: AtIdentifier::Handle(username.parse().map_err(|e| format!("Invalid handle: {}", e))?),
+                    cursor: cursor.clone(),
+                    filter: None,
+                    include_pins: Some(true),
+                    limit: 100.try_into().ok()
+                }.into()).await?;
+
+            let posts_in_batch: Vec<Post> = response.data.feed.iter().map(|post_el| {
+                extract_post(&post_el.post)
+            }).collect();
+
+            all_posts.extend(posts_in_batch);
+            cursor = response.data.cursor;
+
+            self.post_to_ui(RedskyUiMsg::DownloadProgress {
+                id,
+                processed_posts: all_posts.len(),
+                total_posts: None,
+                downloaded_images: 0,
+                total_images: None,
+                status: DownloadStatus::Scanning,
+            });
+
+            if cursor.is_none() {
+                break;
+            }
+            // Rate limiting awareness
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
+        // 2. Filter images (only those posted by this account as requested)
+        let mut images_to_download = Vec::new();
+        for post in &all_posts {
+            if post.author == *username {
+                for img in &post.embeds {
+                    images_to_download.push((img.url.clone(), post.date.clone()));
+                }
+            }
+        }
+
+        let total_images = images_to_download.len();
+        self.post_to_ui(RedskyUiMsg::DownloadProgress {
+            id,
+            processed_posts: all_posts.len(),
+            total_posts: Some(all_posts.len()),
+            downloaded_images: 0,
+            total_images: Some(total_images),
+            status: DownloadStatus::Downloading,
+        });
+
+        // 3. Download images
+        let mut downloaded_count = 0;
+        let mut errors = Vec::new();
+        let target_dir = std::path::Path::new(path);
+
+        for (url, date) in images_to_download {
+            let result = async {
+                let resp = reqwest::get(&url).await?;
+                let bytes = resp.bytes().await?;
+
+                let filename = url.split('/').last().unwrap_or("image.jpg");
+                // date is like 2024-05-18T10:00:00.000Z, sanitized for filename
+                let sanitized_date = date.replace(':', "-");
+                let full_filename = format!("{}_{}", sanitized_date, filename);
+                let file_path = target_dir.join(full_filename);
+
+                tokio::fs::write(file_path, bytes).await?;
+                Ok::<(), Box<dyn std::error::Error>>(())
+            }.await;
+
+            if let Err(e) = result {
+                errors.push(format!("Failed to download {}: {}", url, e));
+            }
+
+            downloaded_count += 1;
+            self.post_to_ui(RedskyUiMsg::DownloadProgress {
+                id,
+                processed_posts: all_posts.len(),
+                total_posts: Some(all_posts.len()),
+                downloaded_images: downloaded_count,
+                total_images: Some(total_images),
+                status: DownloadStatus::Downloading,
+            });
+
+            // Rate limiting awareness
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+
+        self.post_to_ui(RedskyUiMsg::DownloadFinished { id, errors });
+
+        Ok(RedskyUiMsg::PostSucceeed()) // dummy successful msg
+    }
 
     async fn post(&self, msg: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error >> {
         dbg!("post");

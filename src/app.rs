@@ -17,6 +17,18 @@ pub struct StrongRef {
 }
 
 #[derive(Debug)]
+pub struct DownloadTask {
+    pub id: u64,
+    pub username: String,
+    pub path: String,
+    pub processed_posts: usize,
+    pub total_posts: Option<usize>,
+    pub downloaded_images: usize,
+    pub total_images: Option<usize>,
+    pub status: DownloadStatus,
+    pub errors: Vec<String>,
+}
+
 pub struct Post {
     pub uri: String,
     pub cid: Cid,
@@ -58,6 +70,14 @@ impl PostImage {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum DownloadStatus {
+    Scanning,
+    Downloading,
+    Finished,
+    Cancelled,
+}
+
 pub enum RedskyUiMsg {
     LogInSucceededMsg(),
     PostSucceeed(),
@@ -74,7 +94,10 @@ pub enum RedskyUiMsg {
     PrepareImageView {img_uri: String},
     ShowBigImageView {img_uri: String},
     CloseBigImageView {img_uri: String}, 
-    ShowErrorMsg{error: String}
+    ShowErrorMsg{error: String},
+    DownloadProgress { id: u64, processed_posts: usize, total_posts: Option<usize>, downloaded_images: usize, total_images: Option<usize>, status: DownloadStatus },
+    DownloadFinished { id: u64, errors: Vec<String> },
+    StartDownloadJob { username: String, path: String }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -87,6 +110,8 @@ pub enum BskyActorMsg {
     GetUserProfile{username: String},
     GetUserPosts {username: String},
     LoadImage{url: String},
+    StartImageDownload { id: u64, username: String, path: String },
+    CancelImageDownload { id: u64 },
     Close()
 }
 
@@ -115,7 +140,9 @@ pub struct RedskyApp {
     image_cache: HashMap<String, Option<Arc<[u8]>>>,
     post_likers_cache: HashMap<StrongRef, Vec<UserProfile>>,
     post_replies_cache: HashMap<StrongRef, Option<Vec<Post>>>,
-    opened_image_views: HashSet<String>
+    opened_image_views: HashSet<String>,
+    download_tasks: HashMap<u64, DownloadTask>,
+    next_download_id: u64,
 }
 
 impl RedskyApp {
@@ -138,7 +165,9 @@ impl RedskyApp {
             image_cache: HashMap::new(),
             post_likers_cache: HashMap::new(),
             post_replies_cache: HashMap::new(),
-            opened_image_views: HashSet::new()
+            opened_image_views: HashSet::new(),
+            download_tasks: HashMap::new(),
+            next_download_id: 0,
         }
     }
 }
@@ -245,6 +274,37 @@ impl RedskyApp {
             }
             RedskyUiMsg::CloseBigImageView { img_uri } => {
                 self.opened_image_views.remove(&img_uri);
+            }
+            RedskyUiMsg::DownloadProgress { id, processed_posts, total_posts, downloaded_images, total_images, status } => {
+                if let Some(task) = self.download_tasks.get_mut(&id) {
+                    task.processed_posts = processed_posts;
+                    task.total_posts = total_posts;
+                    task.downloaded_images = downloaded_images;
+                    task.total_images = total_images;
+                    task.status = status;
+                }
+            }
+            RedskyUiMsg::DownloadFinished { id, errors } => {
+                if let Some(task) = self.download_tasks.get_mut(&id) {
+                    task.status = DownloadStatus::Finished;
+                    task.errors = errors;
+                }
+            }
+            RedskyUiMsg::StartDownloadJob { username, path } => {
+                let id = self.next_download_id;
+                self.next_download_id += 1;
+                self.download_tasks.insert(id, DownloadTask {
+                    id,
+                    username: username.clone(),
+                    path: path.clone(),
+                    processed_posts: 0,
+                    total_posts: None,
+                    downloaded_images: 0,
+                    total_images: None,
+                    status: DownloadStatus::Scanning,
+                    errors: Vec::new(),
+                });
+                self.post_message(BskyActorMsg::StartImageDownload { id, username, path });
             }
         }
     }
@@ -442,7 +502,10 @@ impl RedskyApp {
         });
     }
 
-    fn make_user_timelines_views(&self, ctx: &egui::Context) {
+    fn make_user_timelines_views(&mut self, ctx: &egui::Context) {
+        let mut to_drop = Vec::new();
+        let mut to_download = Vec::new();
+
         for (username, posts) in &self.user_posts {
             if username == &self.login {
                 continue;
@@ -453,14 +516,40 @@ impl RedskyApp {
                     .with_title(format!("Posts of {}", username.clone()))
                     .with_inner_size([400.0, 600.0]),
                 |ctx, _| {
+                    egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+                        egui::menu::bar(ui, |ui| {
+                            ui.menu_button("Actions", |ui| {
+                                if ui.button("Download All Images").clicked() {
+                                    to_download.push(username.clone());
+                                    ui.close_menu();
+                                }
+                            });
+                        });
+                    });
                     egui::CentralPanel::default().show(ctx, |ui| {
                         self.make_maybe_user_post_view(ui, username, posts);
                     });
 
                     if ctx.input(|i| i.viewport().close_requested()) {
-                        self.ui_tx.send(RedskyUiMsg::DropUserPostsMsg { username: username.clone() }).unwrap();
+                        to_drop.push(username.clone());
                     }
                 });
+        }
+
+        for username in to_drop {
+            self.ui_tx.send(RedskyUiMsg::DropUserPostsMsg { username }).unwrap();
+        }
+
+        for username in to_download {
+            let ui_tx = self.ui_tx.clone();
+            let ctx = ctx.clone();
+            std::thread::spawn(move || {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    let path_str = path.display().to_string();
+                    let _ = ui_tx.send(RedskyUiMsg::StartDownloadJob { username, path: path_str });
+                    ctx.request_repaint();
+                }
+            });
         }
     }
 
@@ -489,6 +578,99 @@ impl RedskyApp {
                         self.post_ui_message(RedskyUiMsg::CloseThreadView { thread_ref: repost_ref.clone() });
                     }
                 });
+        }
+    }
+
+    fn make_download_progress_view(&mut self, ctx: &egui::Context) {
+        let mut to_remove = Vec::new();
+        let mut to_cancel = Vec::new();
+
+        for (id, task) in &self.download_tasks {
+            let mut open = true;
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of(format!("download_{}", id)),
+                egui::ViewportBuilder::default()
+                    .with_title(format!("Downloading images for {}", task.username))
+                    .with_inner_size([400.0, 300.0]),
+                |ctx, _| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.vertical(|ui| {
+                            ui.heading(format!("Target: {}", task.path));
+                            ui.separator();
+
+                            match task.status {
+                                DownloadStatus::Scanning => {
+                                    ui.label(format!("Scanning posts... ({})", task.processed_posts));
+                                    ui.add(egui::ProgressBar::new(0.0).animate(true));
+                                }
+                                DownloadStatus::Downloading => {
+                                    let progress = if let Some(total) = task.total_images {
+                                        if total > 0 {
+                                            task.downloaded_images as f32 / total as f32
+                                        } else {
+                                            1.0
+                                        }
+                                    } else {
+                                        0.0
+                                    };
+                                    ui.label(format!("Downloading images... ({}/{})",
+                                        task.downloaded_images,
+                                        task.total_images.unwrap_or(0)));
+                                    ui.add(egui::ProgressBar::new(progress).show_percentage());
+                                }
+                                DownloadStatus::Finished => {
+                                    ui.label("Finished!");
+                                    ui.add(egui::ProgressBar::new(1.0));
+                                }
+                                DownloadStatus::Cancelled => {
+                                    ui.label("Cancelled");
+                                }
+                            }
+
+                            if !task.errors.is_empty() {
+                                ui.separator();
+                                ui.label("Errors:");
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    for error in &task.errors {
+                                        ui.colored_label(egui::Color32::RED, error);
+                                    }
+                                });
+                            }
+
+                            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                                if task.status == DownloadStatus::Finished || task.status == DownloadStatus::Cancelled {
+                                    if ui.button("Close").clicked() {
+                                        open = false;
+                                    }
+                                } else {
+                                    if ui.button("Cancel").clicked() {
+                                        to_cancel.push(*id);
+                                    }
+                                }
+                            });
+                        });
+                    });
+
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        open = false;
+                    }
+                }
+            );
+            if !open {
+                to_remove.push(*id);
+            }
+        }
+
+        for id in to_cancel {
+            if let Some(task) = self.download_tasks.get_mut(&id) {
+                task.status = DownloadStatus::Cancelled;
+                self.post_message(BskyActorMsg::CancelImageDownload { id });
+            }
+        }
+
+        for id in to_remove {
+            self.download_tasks.remove(&id);
+            self.post_message(BskyActorMsg::CancelImageDownload { id });
         }
     }
 
@@ -559,6 +741,7 @@ impl eframe::App for RedskyApp {
         }
         
         self.make_user_timelines_views(ctx);
+        self.make_download_progress_view(ctx);
         self.make_image_viewports(ctx);
         self.make_open_thread_views(ctx);
         
