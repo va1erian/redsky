@@ -542,13 +542,9 @@ impl RedskyApp {
                                 }
                             }
                             FeedItem::Dehydrated { uri } => {
-                                if ui.is_rect_visible(ui.available_rect_before_wrap()) {
-                                    if let Some(post) = self.post_cache.remove(uri) {
-                                        // Rehydrate
-                                        *item = FeedItem::Full(post);
-                                        // Update LRU: uri was removed from cache, so we should also remove from order
-                                        self.post_cache_order.retain(|u| u != uri);
-                                    }
+                                let is_visible = ui.is_rect_visible(ui.available_rect_before_wrap());
+                                if is_visible {
+                                    // Handle rehydration after match to avoid borrow error
                                 }
 
                                 ui.vertical_centered(|ui| {
@@ -556,6 +552,20 @@ impl RedskyApp {
                                     ui.spinner();
                                     ui.add_space(50.0);
                                 });
+                            }
+                        }
+
+                        // Rehydration check
+                        let mut rehydrate_uri = None;
+                        if let FeedItem::Dehydrated { uri } = item {
+                            if ui.is_rect_visible(ui.available_rect_before_wrap()) {
+                                rehydrate_uri = Some(uri.clone());
+                            }
+                        }
+                        if let Some(uri) = rehydrate_uri {
+                            if let Some(post) = self.post_cache.remove(&uri) {
+                                *item = FeedItem::Full(post);
+                                self.post_cache_order.retain(|u| u != &uri);
                             }
                         }
                     }
@@ -588,7 +598,7 @@ impl RedskyApp {
         let visible_idx = (scroll_offset_y / 200.0) as i32;
         for (idx, item) in posts.iter_mut().enumerate() {
             let mut should_dehydrate = false;
-            if let FeedItem::Full(post) = item {
+            if let FeedItem::Full(_) = item {
                 if (idx as i32 - visible_idx).abs() > 50 {
                     should_dehydrate = true;
                 }
