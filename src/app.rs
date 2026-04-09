@@ -55,9 +55,9 @@ pub struct UserProfile {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct PostImage {
-    thumbnail_url: String,
-    url: String,
-    alt: String
+    pub thumbnail_url: String,
+    pub url: String,
+    pub alt: String
 }
 
 impl PostImage {
@@ -70,7 +70,7 @@ impl PostImage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum DownloadStatus {
     Scanning,
     Downloading,
