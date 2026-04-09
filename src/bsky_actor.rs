@@ -120,7 +120,8 @@ fn extract_quote_reply(post_view: &Object<PostViewData> ) -> Option<Post> {
                 like_count: view_record.like_count.unwrap_or(0),
                 repost_count: view_record.repost_count.unwrap_or(0),
                 embeds: vec![],
-                quoted_post: None
+                quoted_post: None,
+                is_reply: quote_post_data.reply.is_some()
             })
         } else {
             None
@@ -159,7 +160,8 @@ fn extract_post(post_view: &Object<PostViewData>) -> Post {
         like_count: post_view.like_count.unwrap_or(0),
         repost_count: post_view.repost_count.unwrap_or(0),
         embeds: images,
-        quoted_post: quoted_post.map(|post| Box::new(post))
+        quoted_post: quoted_post.map(|post| Box::new(post)),
+        is_reply: post_record_data.reply.is_some()
     }
 }
 
@@ -416,10 +418,12 @@ impl BskyJob {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
 
-        // 2. Filter images (only those posted by this account as requested)
+        // 2. Filter images (only those posted by this account as requested, skip replies and reposts)
         let mut images_to_download = Vec::new();
         for post in &all_posts {
-            if post.author == *username {
+            // Note: atrium_api::app::bsky::feed::defs::FeedViewPostData also has 'reason' for reposts,
+            // but here we filter by author and check if it's a reply.
+            if post.author == *username && !post.is_reply {
                 for img in &post.embeds {
                     images_to_download.push((img.url.clone(), post.date.clone()));
                 }

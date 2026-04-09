@@ -40,7 +40,8 @@ pub struct Post {
     pub like_count: i64,
     pub repost_count: i64,
     pub embeds: Vec<PostImage>,
-    pub quoted_post: Option<Box<Post>>
+    pub quoted_post: Option<Box<Post>>,
+    pub is_reply: bool,
 }
 
 pub struct UserProfile {
