@@ -447,10 +447,23 @@ impl BskyJob {
                     let resp = reqwest::get(&url).await?;
                     let bytes = resp.bytes().await?;
 
-                    let filename = url.split('/').last().unwrap_or("image.jpg");
+                let raw_filename = url.split('/').last().unwrap_or("image");
+                let extension = if raw_filename.contains("@png") {
+                    "png"
+                } else if raw_filename.contains("@jpeg") || raw_filename.contains("@jpg") {
+                    "jpg"
+                } else if raw_filename.contains("@webp") {
+                    "webp"
+                } else if raw_filename.contains("@gif") {
+                    "gif"
+                } else {
+                    raw_filename.split('.').last().filter(|ext| !ext.is_empty()).unwrap_or("png")
+                };
+
+                let base_name = raw_filename.split('@').next().unwrap_or(raw_filename);
                     // date is like 2024-05-18T10:00:00.000Z, sanitized for filename
                     let sanitized_date = date.replace(':', "-");
-                    let full_filename = format!("{}_{}", sanitized_date, filename);
+                let full_filename = format!("{}_{}.{}", sanitized_date, base_name, extension);
                     let file_path = target_dir.join(full_filename);
 
                     tokio::fs::write(file_path, bytes).await?;
