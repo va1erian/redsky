@@ -44,6 +44,7 @@ pub struct Post {
     pub is_reply: bool,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct UserProfile {
     pub handle: String,
     pub display_name: String,
@@ -98,7 +99,9 @@ pub enum RedskyUiMsg {
     ShowErrorMsg{error: String},
     DownloadProgress { id: u64, processed_posts: usize, total_posts: Option<usize>, downloaded_images: usize, total_images: Option<usize>, status: DownloadStatus },
     DownloadFinished { id: u64, errors: Vec<String> },
-    StartDownloadJob { username: String, path: String }
+    StartDownloadJob { username: String, path: String },
+    ShowSearchResults { results: Vec<UserProfile> },
+    ShowErrorMsg{error: String}
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -110,6 +113,7 @@ pub enum BskyActorMsg {
     GetPostAndReplies {post_ref: StrongRef},
     GetUserProfile{username: String},
     GetUserPosts {username: String},
+    SearchActors { query: String },
     LoadImage{url: String},
     StartImageDownload { id: u64, username: String, path: String },
     CancelImageDownload { id: u64 },
@@ -144,6 +148,9 @@ pub struct RedskyApp {
     opened_image_views: HashSet<String>,
     download_tasks: HashMap<u64, DownloadTask>,
     next_download_id: u64,
+    is_search_window_open: bool,
+    search_query: String,
+    search_results: Vec<UserProfile>
 }
 
 impl RedskyApp {
@@ -169,6 +176,9 @@ impl RedskyApp {
             opened_image_views: HashSet::new(),
             download_tasks: HashMap::new(),
             next_download_id: 0,
+            is_search_window_open: false,
+            search_query: String::new(),
+            search_results: Vec::new()
         }
     }
 }
@@ -183,6 +193,9 @@ impl RedskyApp {
     }
 
     fn request_image(&mut self, img_url: &str) {
+        if img_url.is_empty() {
+            return;
+        }
         if let None = self.image_cache.get(img_url) {
             println!("requesting image {}", img_url);
             self.image_cache.insert(img_url.to_string(), None);
@@ -306,6 +319,12 @@ impl RedskyApp {
                     errors: Vec::new(),
                 });
                 self.post_message(BskyActorMsg::StartImageDownload { id, username, path });
+            }
+            RedskyUiMsg::ShowSearchResults { results } => {
+                for profile in &results {
+                    self.request_image(&profile.avatar_uri);
+                }
+                self.search_results = results;
             }
         }
     }
@@ -729,7 +748,54 @@ impl RedskyApp {
                 }
             });
 
-    }   
+    }
+
+    fn make_search_window(&mut self, ctx: &egui::Context) {
+        ctx.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("__search_actors"),
+            egui::ViewportBuilder::default()
+                .with_title("Search Accounts")
+                .with_inner_size([400.0, 500.0]),
+            |ctx, _| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.vertical(|ui| {
+                        ui.heading("Search Accounts");
+                        if ui.text_edit_singleline(&mut self.search_query).changed() {
+                            self.post_message(BskyActorMsg::SearchActors { query: self.search_query.clone() });
+                        }
+                        ui.separator();
+
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            for profile in &self.search_results {
+                                let (rect, response) = ui.allocate_at_least(egui::vec2(ui.available_width(), 48.0), egui::Sense::click());
+                                if response.hovered() {
+                                    ui.painter().rect_filled(rect, 4.0, egui::Color32::from_gray(64));
+                                }
+                                if response.clicked() {
+                                    self.post_ui_message(RedskyUiMsg::PrepareUserView { username: profile.handle.clone() });
+                                    self.post_message(BskyActorMsg::GetUserPosts { username: profile.handle.clone() });
+                                    self.is_search_window_open = false;
+                                }
+
+                                let mut child_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                                child_ui.horizontal(|ui| {
+                                    ui.add_space(4.0);
+                                    self.make_buffer_image_view(ui, &profile.avatar_uri, self.image_cache.get(&profile.avatar_uri).unwrap_or(&None), None);
+                                    ui.vertical(|ui| {
+                                        ui.label(egui::RichText::new(&profile.display_name).strong());
+                                        ui.small(&profile.handle);
+                                    });
+                                });
+                            }
+                        });
+                    });
+                });
+
+                if ctx.input(|i| i.viewport().close_requested()) {
+                    self.is_search_window_open = false;
+                }
+            });
+    }
 }
 
 impl eframe::App for RedskyApp {
@@ -750,12 +816,19 @@ impl eframe::App for RedskyApp {
             self.make_new_post_view(ctx);
         }
 
+        if self.is_search_window_open {
+            self.make_search_window(ctx);
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui | {
                 egui::menu::bar(ui, |ui| {
                     ui.menu_button("File", |ui| {
                         if ui.button("New post...").clicked() {
                             self.is_post_window_open = true;
+                        }
+                        if ui.button("Search accounts...").clicked() {
+                            self.is_search_window_open = true;
                         }
                         if ui.button("Quit").clicked() {
                             std::process::exit(0);

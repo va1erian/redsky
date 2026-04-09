@@ -189,6 +189,9 @@ impl BskyJob {
             BskyActorMsg::GetUserPosts { username } => {
                 self.get_user_posts(username).await
             }
+            BskyActorMsg::SearchActors { query } => {
+                self.search_actors(query).await
+            }
             BskyActorMsg::LoadImage { url } => {
                 self.load_image(url).await
             }
@@ -297,6 +300,34 @@ impl BskyJob {
         .await?;
         let bytes = resp.bytes().await?;
         Ok(RedskyUiMsg::NotifyImageLoaded { url: url.to_string(), data: bytes.to_vec().into() })
+    }
+
+    async fn search_actors(&self, query: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+        dbg!("search actors", &query);
+        let response = self.bsky_agent
+            .api
+            .app
+            .bsky
+            .actor
+            .search_actors_typeahead(atrium_api::app::bsky::actor::search_actors_typeahead::ParametersData {
+                limit: 10.try_into().ok(),
+                q: Some(query.clone()),
+                term: None // DEPRECATED: use 'q' instead.
+            }.into()).await?;
+
+        let results = response.data.actors.iter().map(|actor| {
+            UserProfile {
+                handle: actor.handle.to_string(),
+                display_name: actor.display_name.clone().unwrap_or("(no display name)".to_string()),
+                bio: "".to_string(),
+                avatar_uri: actor.avatar.clone().unwrap_or("".to_string()),
+                follower_count: 0,
+                follow_count: 0,
+                post_count: 0
+            }
+        }).collect();
+
+        Ok(RedskyUiMsg::ShowSearchResults { results })
     }
 
     async fn get_user_posts(&self, username: &String)  -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
