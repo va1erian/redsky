@@ -465,9 +465,15 @@ impl BskyJob {
                 };
 
                 let base_name = raw_filename.split('@').next().unwrap_or(raw_filename);
+                let truncated_base = if base_name.len() > 20 {
+                    &base_name[..20]
+                } else {
+                    base_name
+                };
+
                     // date is like 2024-05-18T10:00:00.000Z, sanitized for filename
                     let sanitized_date = date.replace(':', "-");
-                let full_filename = format!("{}_{}.{}", sanitized_date, base_name, extension);
+                let full_filename = format!("{}_{}.{}", sanitized_date, truncated_base, extension);
                     let file_path = target_dir.join(full_filename);
 
                     tokio::fs::write(file_path, bytes).await?;
