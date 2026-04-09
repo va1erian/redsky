@@ -6,7 +6,7 @@ use atrium_api::app::bsky::feed::defs::PostViewData;
 use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
-use atrium_api::app::bsky::feed::post;
+use atrium_api::app::bsky::feed::{like, post, repost};
 use atrium_api::types::string::AtIdentifier;
 use atrium_api::types::string::Datetime;
 use atrium_api::types::Object;
@@ -121,7 +121,9 @@ fn extract_quote_reply(post_view: &Object<PostViewData> ) -> Option<Post> {
                 repost_count: view_record.repost_count.unwrap_or(0),
                 embeds: vec![],
                 quoted_post: None,
-                is_reply: quote_post_data.reply.is_some()
+                is_reply: quote_post_data.reply.is_some(),
+                viewer_like: None,
+                viewer_repost: None,
             })
         } else {
             None
@@ -161,7 +163,9 @@ fn extract_post(post_view: &Object<PostViewData>) -> Post {
         repost_count: post_view.repost_count.unwrap_or(0),
         embeds: images,
         quoted_post: quoted_post.map(|post| Box::new(post)),
-        is_reply: post_record_data.reply.is_some()
+        is_reply: post_record_data.reply.is_some(),
+        viewer_like: post_view.viewer.as_ref().and_then(|v| v.like.clone()),
+        viewer_repost: post_view.viewer.as_ref().and_then(|v| v.repost.clone()),
     }
 }
 
@@ -177,9 +181,24 @@ impl BskyJob {
             BskyActorMsg::GetPostAndReplies { post_ref } => {
                 self.get_post_thread(post_ref).await
             }
-            //BskyActorMsg::GetPostLikers {post_ref } => {
-            //    self.get_post_likers(post_ref).await
-            //}
+            BskyActorMsg::GetPostLikers { post_ref } => {
+                self.get_post_likers(post_ref).await
+            }
+            BskyActorMsg::GetPostRepostedBy { post_ref } => {
+                self.get_post_reposted_by(post_ref).await
+            }
+            BskyActorMsg::Like { post_ref } => {
+                self.like(post_ref).await
+            }
+            BskyActorMsg::Unlike { post_uri, like_record_uri } => {
+                self.unlike(post_uri, like_record_uri).await
+            }
+            BskyActorMsg::Repost { post_ref } => {
+                self.repost(post_ref).await
+            }
+            BskyActorMsg::Unrepost { post_uri, repost_record_uri } => {
+                self.unrepost(post_uri, repost_record_uri).await
+            }
             BskyActorMsg::GetTimeline() => {
                 self.get_timeline_posts().await
             }            
@@ -245,6 +264,98 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyLikesLoaded { post_uri: strong_ref.clone(), likers })
     }
 
+    async fn get_post_reposted_by(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("get reposters");
+
+        let response = self.bsky_agent
+        .api
+        .app
+        .bsky
+        .feed
+        .get_reposted_by(atrium_api::app::bsky::feed::get_reposted_by::ParametersData {
+            cid: Some(strong_ref.cid.clone()),
+            uri: strong_ref.uri.clone(),
+            cursor: None,
+            limit: None
+        }.into()).await?;
+
+    let reposters = response.data.reposted_by.iter().map(|profile| {
+            UserProfile {
+                handle: profile.handle.clone().into(),
+                display_name: profile.display_name.clone().unwrap_or("(no display name)".to_string()),
+                bio: profile.description.clone().unwrap_or("(No bio)".to_string()),
+                avatar_uri: profile.avatar.clone().unwrap_or("".to_string()),
+                follower_count: 0,
+                follow_count: 0,
+                post_count: 0
+            }
+        }).collect();
+
+        Ok(RedskyUiMsg::NotifyRepostersLoaded { post_uri: strong_ref.clone(), reposters })
+    }
+
+    async fn like(&self, strong_ref: StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("liking post");
+        let post_uri = strong_ref.uri.clone();
+        let response = self.bsky_agent.create_record(atrium_api::app::bsky::feed::like::RecordData {
+            created_at: Datetime::now(),
+            subject: atrium_api::com::atproto::repo::strong_ref::MainData {
+                cid: strong_ref.cid,
+                uri: strong_ref.uri,
+            }.into(),
+        }).await?;
+        Ok(RedskyUiMsg::NotifyLikeActionSucceeded {
+            post_uri,
+            like_uri: response.data.uri
+        })
+    }
+
+    async fn unlike(&self, _post_uri: String, like_record_uri: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("unliking post");
+        let parts: Vec<&str> = like_record_uri.split('/').collect();
+        let rkey = parts.last().ok_or("Invalid like record URI")?;
+
+        self.bsky_agent.api.com.atproto::repo::delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
+            collection: "app.bsky.feed.like".parse()?,
+            repo: self.bsky_agent.who_am_i().await?.did,
+            rkey: rkey.to_string(),
+            swap_commit: None,
+            swap_record: None,
+        }.into()).await?;
+        Ok(RedskyUiMsg::ActionSucceeded())
+    }
+
+    async fn repost(&self, strong_ref: StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("reposting post");
+        let post_uri = strong_ref.uri.clone();
+        let response = self.bsky_agent.create_record(atrium_api::app::bsky::feed::repost::RecordData {
+            created_at: Datetime::now(),
+            subject: atrium_api::com::atproto::repo::strong_ref::MainData {
+                cid: strong_ref.cid,
+                uri: strong_ref.uri,
+            }.into(),
+        }).await?;
+        Ok(RedskyUiMsg::NotifyRepostActionSucceeded {
+            post_uri,
+            repost_uri: response.data.uri
+        })
+    }
+
+    async fn unrepost(&self, _post_uri: String, repost_record_uri: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("unreposting post");
+        let parts: Vec<&str> = repost_record_uri.split('/').collect();
+        let rkey = parts.last().ok_or("Invalid repost record URI")?;
+
+        self.bsky_agent.api.com.atproto::repo::delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
+            collection: "app.bsky.feed.repost".parse()?,
+            repo: self.bsky_agent.who_am_i().await?.did,
+            rkey: rkey.to_string(),
+            swap_commit: None,
+            swap_record: None,
+        }.into()).await?;
+        Ok(RedskyUiMsg::ActionSucceeded())
+    }
+
     async fn get_post_thread(&self, strong_ref: &StrongRef) -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get post thread");
 
@@ -288,7 +399,7 @@ impl BskyJob {
                 replies
             })
         } else {
-        Ok(RedskyUiMsg::PostSucceeed())
+        Ok(RedskyUiMsg::ActionSucceeded())
         }
     }
 
@@ -501,7 +612,7 @@ impl BskyJob {
 
         self.post_to_ui(RedskyUiMsg::DownloadFinished { id, errors });
 
-        Ok(RedskyUiMsg::PostSucceeed()) // dummy successful msg
+        Ok(RedskyUiMsg::ActionSucceeded()) // dummy successful msg
     }
 
     async fn post(&self, msg: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
@@ -518,6 +629,6 @@ impl BskyJob {
             text: msg.to_string(),
         })
         .await?;
-        Ok(RedskyUiMsg::PostSucceeed())
+        Ok(RedskyUiMsg::ActionSucceeded())
     }
 }
