@@ -282,7 +282,7 @@ impl RedskyApp {
             RedskyUiMsg::NotifyLikesLoaded { post_uri, likers } => {
                 self.post_likers_cache.insert(post_uri, likers);
             }
-            RedskyUiMsg::NotifyPostAndRepliesLoaded { post, mut replies } => {
+            RedskyUiMsg::NotifyPostAndRepliesLoaded { post, replies } => {
                 let strong_ref = StrongRef { uri: post.uri.clone(), cid: post.cid.clone()};
                 self.request_post_images(&replies);
                 self.request_post_images(&vec![post.clone()]);
@@ -480,6 +480,10 @@ impl RedskyApp {
 
 
     fn make_post_view(&mut self, ui: &mut Ui, username: &str, posts: &mut Vec<FeedItem>) {
+        let mut scroll_top_reset = false;
+        let mut scroll_offset_y = 0.0;
+        let mut content_size_y = 0.0;
+
         ui.vertical_centered_justified(|ui| {
             let scroll_area = egui::ScrollArea::vertical();
             let scroll_output = scroll_area.show(ui, |ui| {
@@ -489,8 +493,8 @@ impl RedskyApp {
                             FeedItem::Full(post) => {
                                 let post_block = ui.vertical(|ui| {
                                     if idx == 0 && self.scroll_to_top {
-                                        ui.scroll_to_me(Some(egui::Align::TOP));
-                                        self.scroll_to_top = false;
+                                        ui.scroll_to_rect(ui.max_rect(), Some(egui::Align::TOP));
+                                        scroll_top_reset = true;
                                     }
                                     self.make_post_inner_view(ui, post);
 
@@ -536,43 +540,9 @@ impl RedskyApp {
                                         },
                                     });
                                 }
-
-                                // Dehydration logic
-                                let visible_idx = (scroll_output.state.offset.y / 200.0) as i32; // Rough estimate of visible index
-                                if (idx as i32 - visible_idx).abs() > 50 {
-                                    let post_to_cache = std::mem::replace(post, Post {
-                                        uri: String::new(),
-                                        cid: Cid::default(),
-                                        content: String::new(),
-                                        author: String::new(),
-                                        display_name: String::new(),
-                                        avatar_img: String::new(),
-                                        date: String::new(),
-                                        like_count: 0,
-                                        repost_count: 0,
-                                        embeds: vec![],
-                                        quoted_post: None,
-                                        is_reply: false,
-                                    });
-                                    let uri = post_to_cache.uri.clone();
-                                    if !uri.is_empty() {
-                                        self.post_cache.insert(uri.clone(), post_to_cache);
-                                        self.post_cache_order.push_back(uri.clone());
-
-                                        // LRU Eviction
-                                        if self.post_cache.len() > 200 {
-                                            if let Some(oldest_uri) = self.post_cache_order.pop_front() {
-                                                self.post_cache.remove(&oldest_uri);
-                                            }
-                                        }
-
-                                        *item = FeedItem::Dehydrated { uri };
-                                    }
-                                }
                             }
                             FeedItem::Dehydrated { uri } => {
-                                let is_visible = ui.is_rect_visible(ui.available_rect_before_wrap());
-                                if is_visible {
+                                if ui.is_rect_visible(ui.available_rect_before_wrap()) {
                                     if let Some(post) = self.post_cache.remove(uri) {
                                         // Rehydrate
                                         *item = FeedItem::Full(post);
@@ -591,9 +561,11 @@ impl RedskyApp {
                     }
                 });
             });
+            scroll_offset_y = scroll_output.state.offset.y;
+            content_size_y = scroll_output.content_size.y;
 
             // Infinite Scroll Check
-            if scroll_output.state.offset.y > scroll_output.content_size.y * 0.8 && scroll_output.content_size.y > 0.0 {
+            if scroll_offset_y > content_size_y * 0.8 && content_size_y > 0.0 {
                 if username == "Your timeline" {
                     if let Some(cursor) = self.timeline_cursor.clone() {
                         self.post_message(BskyActorMsg::GetTimeline { cursor: Some(cursor) });
@@ -607,13 +579,46 @@ impl RedskyApp {
                 }
             }
         });
+
+        if scroll_top_reset {
+            self.scroll_to_top = false;
+        }
+
+        // Dehydration logic
+        let visible_idx = (scroll_offset_y / 200.0) as i32;
+        for (idx, item) in posts.iter_mut().enumerate() {
+            let mut should_dehydrate = false;
+            if let FeedItem::Full(post) = item {
+                if (idx as i32 - visible_idx).abs() > 50 {
+                    should_dehydrate = true;
+                }
+            }
+
+            if should_dehydrate {
+                if let FeedItem::Full(post) = std::mem::replace(item, FeedItem::Dehydrated { uri: String::new() }) {
+                    let uri = post.uri.clone();
+                    if !uri.is_empty() {
+                        self.post_cache.insert(uri.clone(), post);
+                        self.post_cache_order.push_back(uri.clone());
+
+                        // LRU Eviction
+                        if self.post_cache.len() > 200 {
+                            if let Some(oldest_uri) = self.post_cache_order.pop_front() {
+                                self.post_cache.remove(&oldest_uri);
+                            }
+                        }
+                        *item = FeedItem::Dehydrated { uri };
+                    }
+                }
+            }
+        }
     }
 
     fn make_user_timelines_views(&mut self, ctx: &egui::Context) {
         let mut to_drop = Vec::new();
         let mut to_download = Vec::new();
 
-        let mut usernames: Vec<String> = self.user_posts.keys().cloned().collect();
+        let usernames: Vec<String> = self.user_posts.keys().cloned().collect();
         for username in usernames {
             if username == self.login {
                 continue;
@@ -941,9 +946,10 @@ impl eframe::App for RedskyApp {
                         });
                     }
                     MainViewState::OwnPostFeed => {
-                        let mut maybe_post = self.user_posts.get_mut(&self.login).and_then(|p| p.take());
-                        self.make_maybe_user_post_view(ui, &self.login, &mut maybe_post);
-                        self.user_posts.insert(self.login.clone(), maybe_post);
+                        let login = self.login.clone();
+                        let mut maybe_post = self.user_posts.get_mut(&login).and_then(|p| p.take());
+                        self.make_maybe_user_post_view(ui, &login, &mut maybe_post);
+                        self.user_posts.insert(login, maybe_post);
                     }
                 }
             })
