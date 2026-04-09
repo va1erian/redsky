@@ -461,7 +461,7 @@ impl BskyJob {
                 } else if raw_filename.contains("@gif") {
                     "gif"
                 } else {
-                    raw_filename.split('.').last().filter(|ext| !ext.is_empty()).unwrap_or("png")
+                    "png"
                 };
 
                 let base_name = raw_filename.split('@').next().unwrap_or(raw_filename);
@@ -473,7 +473,7 @@ impl BskyJob {
 
                     // date is like 2024-05-18T10:00:00.000Z, sanitized for filename
                     let sanitized_date = date.replace(':', "-");
-                let full_filename = format!("{}_{}.{}", sanitized_date, truncated_base, extension);
+                let full_filename = format!("img{}_{}.{}", sanitized_date, truncated_base, extension);
                     let file_path = target_dir.join(full_filename);
 
                     tokio::fs::write(file_path, bytes).await?;
