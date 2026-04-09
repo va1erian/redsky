@@ -302,7 +302,7 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyImageLoaded { url: url.to_string(), data: bytes.to_vec().into() })
     }
 
-    async fn search_actors(&self, query: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    async fn search_actors(&self, query: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("search actors", &query);
         let response = self.bsky_agent
             .api

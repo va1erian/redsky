@@ -16,6 +16,17 @@ pub struct StrongRef {
     pub cid: Cid
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct UserProfile {
+    pub handle: String,
+    pub display_name: String,
+    pub bio: String,
+    pub avatar_uri: String,
+    pub follower_count: i64,
+    pub follow_count: i64,
+    pub post_count: i64
+}
+
 #[derive(Debug)]
 pub struct DownloadTask {
     pub id: u64,
@@ -43,17 +54,6 @@ pub struct Post {
     pub quoted_post: Option<Box<Post>>,
     pub is_reply: bool,
 }
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct UserProfile {
-    pub handle: String,
-    pub display_name: String,
-    pub bio: String,
-    pub avatar_uri: String,
-    pub follower_count: i64,
-    pub follow_count: i64,
-    pub post_count: i64
-} 
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct PostImage {
@@ -100,8 +100,7 @@ pub enum RedskyUiMsg {
     DownloadProgress { id: u64, processed_posts: usize, total_posts: Option<usize>, downloaded_images: usize, total_images: Option<usize>, status: DownloadStatus },
     DownloadFinished { id: u64, errors: Vec<String> },
     StartDownloadJob { username: String, path: String },
-    ShowSearchResults { results: Vec<UserProfile> },
-    ShowErrorMsg{error: String}
+    ShowSearchResults { results: Vec<UserProfile> }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -178,7 +177,7 @@ impl RedskyApp {
             next_download_id: 0,
             is_search_window_open: false,
             search_query: String::new(),
-            search_results: Vec::new()
+            search_results: Vec::new(),
         }
     }
 }
