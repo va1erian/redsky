@@ -212,7 +212,7 @@ impl BskyJob {
         self.ctx.request_repaint();
     }
 
-    async fn get_post_likers(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error>> {
+    async fn get_post_likers(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get likers");
 
         let response = self.bsky_agent
@@ -243,7 +243,7 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyLikesLoaded { post_uri: strong_ref.clone(), likers })
     }
 
-    async fn get_post_thread(&self, strong_ref: &StrongRef) -> Result<RedskyUiMsg,  Box<dyn std::error::Error>> {
+    async fn get_post_thread(&self, strong_ref: &StrongRef) -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get post thread");
 
         let response = self.bsky_agent
@@ -290,14 +290,14 @@ impl BskyJob {
         }
     }
 
-    async fn load_image(&self, url: &String) -> Result<RedskyUiMsg,  Box<dyn std::error::Error>> {
+    async fn load_image(&self, url: &String) -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
         let resp = reqwest::get(url)
         .await?;
         let bytes = resp.bytes().await?;
         Ok(RedskyUiMsg::NotifyImageLoaded { url: url.to_string(), data: bytes.to_vec().into() })
     }
 
-    async fn get_user_posts(&self, username: &String)  -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    async fn get_user_posts(&self, username: &String)  -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get user posts");
         let at_uri = format!("at://{}", username);
         dbg!(&at_uri);
@@ -322,7 +322,7 @@ impl BskyJob {
         })
     }
 
-    async fn get_user_profile(&self, username: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    async fn get_user_profile(&self, username: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get user profile", &username);
 
         let profile = self.bsky_agent
@@ -346,7 +346,7 @@ impl BskyJob {
         }})
     }
 
-    async fn get_timeline_posts(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    async fn get_timeline_posts(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get tl");
 
         let posts = self.bsky_agent
@@ -368,13 +368,13 @@ impl BskyJob {
         })
     }
 
-    async fn login(&self, login: &String, pass: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    async fn login(&self, login: &String, pass: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("loggin in");
         let _ = self.bsky_agent.login(login, pass).await?;
         Ok(RedskyUiMsg::LogInSucceededMsg())
     } 
 
-    async fn download_all_images(&self, id: u64, username: &String, path: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error>> {
+    async fn download_all_images(&self, id: u64, username: &String, path: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         let mut all_posts = Vec::new();
         let mut cursor = None;
 
@@ -442,22 +442,24 @@ impl BskyJob {
         let target_dir = std::path::Path::new(path);
 
         for (url, date) in images_to_download {
-            let result = async {
-                let resp = reqwest::get(&url).await?;
-                let bytes = resp.bytes().await?;
+            {
+                let result = async {
+                    let resp = reqwest::get(&url).await?;
+                    let bytes = resp.bytes().await?;
 
-                let filename = url.split('/').last().unwrap_or("image.jpg");
-                // date is like 2024-05-18T10:00:00.000Z, sanitized for filename
-                let sanitized_date = date.replace(':', "-");
-                let full_filename = format!("{}_{}", sanitized_date, filename);
-                let file_path = target_dir.join(full_filename);
+                    let filename = url.split('/').last().unwrap_or("image.jpg");
+                    // date is like 2024-05-18T10:00:00.000Z, sanitized for filename
+                    let sanitized_date = date.replace(':', "-");
+                    let full_filename = format!("{}_{}", sanitized_date, filename);
+                    let file_path = target_dir.join(full_filename);
 
-                tokio::fs::write(file_path, bytes).await?;
-                Ok::<(), Box<dyn std::error::Error>>(())
-            }.await;
+                    tokio::fs::write(file_path, bytes).await?;
+                    Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+                }.await;
 
-            if let Err(e) = result {
-                errors.push(format!("Failed to download {}: {}", url, e));
+                if let Err(e) = result {
+                    errors.push(format!("Failed to download {}: {}", url, e));
+                }
             }
 
             downloaded_count += 1;
@@ -479,7 +481,7 @@ impl BskyJob {
         Ok(RedskyUiMsg::PostSucceeed()) // dummy successful msg
     }
 
-    async fn post(&self, msg: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error >> {
+    async fn post(&self, msg: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("post");
         let _ = self.bsky_agent.create_record(atrium_api::app::bsky::feed::post::RecordData {
             created_at: Datetime::now(),
