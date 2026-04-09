@@ -4,7 +4,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use atrium_api::types::string::Cid;
 use egui::load::Bytes;
-use egui::{vec2, ImageSource, Sense};
+use egui::{vec2, Align, ImageSource, Layout, Sense, UiBuilder};
 use egui::{RichText, Ui};
 use egui_extras::{Size, StripBuilder};
 use std::sync::mpsc::Receiver;
@@ -767,7 +767,7 @@ impl RedskyApp {
 
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             for profile in &self.search_results {
-                                let (rect, response) = ui.allocate_at_least(egui::vec2(ui.available_width(), 48.0), egui::Sense::click());
+                                let (rect, response) = ui.allocate_at_least(vec2(ui.available_width(), 48.0), Sense::click());
                                 if response.hovered() {
                                     ui.painter().rect_filled(rect, 4.0, egui::Color32::from_gray(64));
                                 }
@@ -777,12 +777,12 @@ impl RedskyApp {
                                     self.is_search_window_open = false;
                                 }
 
-                                let mut child_ui = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
+                                let mut child_ui = ui.new_child(UiBuilder::new().max_rect(rect).layout(Layout::left_to_right(Align::Center)));
                                 child_ui.horizontal(|ui| {
                                     ui.add_space(4.0);
                                     self.make_buffer_image_view(ui, &profile.avatar_uri, self.image_cache.get(&profile.avatar_uri).unwrap_or(&None), None);
                                     ui.vertical(|ui| {
-                                        ui.label(egui::RichText::new(&profile.display_name).strong());
+                                        ui.label(RichText::new(&profile.display_name).strong());
                                         ui.small(&profile.handle);
                                     });
                                 });
