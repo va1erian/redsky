@@ -234,6 +234,7 @@ impl BskyJob {
         self.ctx.request_repaint();
     }
 
+    #[allow(dead_code)]
     async fn get_post_likers(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get likers");
 
