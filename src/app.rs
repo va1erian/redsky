@@ -90,6 +90,7 @@ pub enum DownloadStatus {
 pub enum RedskyUiMsg {
     LogInSucceededMsg(),
     PostSucceeed(),
+    RefreshBookmarksMsg{posts: Vec<Post>},
     PrepareUserView{username: String},
     PrepareThreadView{thread_ref: StrongRef},
     CloseThreadView{thread_ref: StrongRef},
@@ -115,6 +116,7 @@ pub enum BskyActorMsg {
     Login {login: String, pass: String},
     Post {msg_body: String},
     GetTimeline { cursor: Option<String> },
+    GetBookmarks(),
     //GetPostLikers {post_ref: StrongRef},
     GetPostAndReplies {post_ref: StrongRef},
     GetUserProfile{username: String},
@@ -130,7 +132,8 @@ pub enum BskyActorMsg {
 enum MainViewState {
     Login,
     TimelineFeed,
-    OwnPostFeed
+    OwnPostFeed,
+    BookmarksFeed
 }
 
 pub struct RedskyApp {
@@ -145,6 +148,7 @@ pub struct RedskyApp {
     pass: String,
     msg: String,
     timeline: Vec<FeedItem>,
+    bookmarks: Vec<Post>,
     user_posts: HashMap<String, Option<Vec<FeedItem>>>,
     timeline_cursor: Option<String>,
     user_cursors: HashMap<String, Option<String>>,
@@ -179,6 +183,7 @@ impl RedskyApp {
             pass: String::new(),
             msg: String::new(),
             timeline: Vec::new(),
+            bookmarks: Vec::new(),
             user_posts: HashMap::new(),
             timeline_cursor: None,
             user_cursors: HashMap::new(),
@@ -250,6 +255,10 @@ impl RedskyApp {
                 }
                 self.timeline_cursor = cursor;
             }
+            RedskyUiMsg::RefreshBookmarksMsg { posts } => {
+                self.request_post_images(&posts);
+                self.bookmarks = posts;
+            }
             RedskyUiMsg::PrepareUserView { username } => {
                 self.user_posts.insert(username.clone(), None);
                 self.post_message(BskyActorMsg::GetUserProfile { username });
@@ -311,6 +320,7 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::GetUserPosts{username: self.login.clone(), cursor: None});
                 self.post_message(BskyActorMsg::GetUserProfile { username: self.login.clone() });
                 self.post_message(BskyActorMsg::GetTimeline { cursor: None });
+                self.post_message(BskyActorMsg::GetBookmarks());
             }
             RedskyUiMsg::NotifyImageLoaded { url, data } => {
                 self.image_cache.insert(url.clone(), Some(data));
@@ -918,7 +928,7 @@ impl RedskyApp {
                         });
                         if let Some(profile) = clicked_profile {
                             self.post_ui_message(RedskyUiMsg::PrepareUserView { username: profile.handle.clone() });
-                            self.post_message(BskyActorMsg::GetUserPosts { username: profile.handle.clone() });
+                            self.post_message(BskyActorMsg::GetUserPosts { username: profile.handle.clone(), cursor: None });
                             self.is_search_window_open = false;
                         }
                     });
@@ -991,7 +1001,9 @@ impl eframe::App for RedskyApp {
                             ui.selectable_value(&mut self.main_view_state, 
                                 MainViewState::OwnPostFeed, RichText::new("Profile").heading());
                             ui.selectable_value(&mut self.main_view_state,
-                                MainViewState::TimelineFeed, RichText::new("Timeline feed").heading())
+                                MainViewState::TimelineFeed, RichText::new("Timeline feed").heading());
+                            ui.selectable_value(&mut self.main_view_state,
+                                MainViewState::BookmarksFeed, RichText::new("Bookmarks").heading())
                             });
                         ui.separator();
                     });
@@ -1032,6 +1044,19 @@ impl eframe::App for RedskyApp {
                             });
                         });
                     }
+                    MainViewState::BookmarksFeed => {
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),|ui| {
+                            ui.vertical(|ui| {
+                                // Bookmarks also needs to use FeedItem if I want to use make_post_view
+                                // or I should convert them.
+                                // In this patch I'll convert them for simplicity as a first step.
+                                let mut bookmark_items: Vec<FeedItem> = self.bookmarks.iter().cloned().map(FeedItem::Full).collect();
+                                self.make_post_view(ui, "Your bookmarks", &mut bookmark_items);
+                                // Note: changes to bookmark_items (like dehydration) won't persist back to self.bookmarks
+                                // this way. Ideally bookmarks should also be Vec<FeedItem>.
+                            });
+                        });
+                    }
                     MainViewState::OwnPostFeed => {
                         let login = self.login.clone();
                         let mut maybe_post = self.user_posts.get_mut(&login).and_then(|p| p.take());
@@ -1044,4 +1069,3 @@ impl eframe::App for RedskyApp {
         });
     }
 }
-
