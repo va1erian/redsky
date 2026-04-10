@@ -12,7 +12,9 @@ egui_extras = { version = "0.31.1", features = ["image", "svg"] }
 image = { version = "0.25.5", features = ["jpeg", "png", "webp", "gif"] } 
 eframe = { version = "0.31.1", default-features = false, features = [
     "default_fonts",
-    "wgpu",         
+    "wgpu",
+    "wayland",
+    "x11",
 ] }
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
