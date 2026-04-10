@@ -9,8 +9,7 @@ use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
-use atrium_api::types::string::AtIdentifier;
-use atrium_api::types::string::Datetime;
+use atrium_api::types::string::{AtIdentifier, Datetime, RecordKey};
 use atrium_api::types::Object;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
@@ -335,12 +334,12 @@ impl BskyJob {
         let parts: Vec<&str> = like_record_uri.split('/').collect();
         let rkey = parts.last().ok_or("Invalid like record URI")?;
 
-        let session = self.bsky_agent.api.com.atproto::server::get_session(()).await?;
+        let session = self.bsky_agent.api.com.atproto.server.get_session().await?;
 
-        self.bsky_agent.api.com.atproto::repo::delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
+        self.bsky_agent.api.com.atproto.repo.delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
             collection: "app.bsky.feed.like".parse()?,
-            repo: session.data.did,
-            rkey: rkey.to_string(),
+            repo: AtIdentifier::Did(session.data.did),
+            rkey: RecordKey::new(rkey.to_string()).map_err(|e| e.to_string())?,
             swap_commit: None,
             swap_record: None,
         }.into()).await?;
@@ -369,12 +368,12 @@ impl BskyJob {
         let parts: Vec<&str> = repost_record_uri.split('/').collect();
         let rkey = parts.last().ok_or("Invalid repost record URI")?;
 
-        let session = self.bsky_agent.api.com.atproto::server::get_session(()).await?;
+        let session = self.bsky_agent.api.com.atproto.server.get_session().await?;
 
-        self.bsky_agent.api.com.atproto::repo::delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
+        self.bsky_agent.api.com.atproto.repo.delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
             collection: "app.bsky.feed.repost".parse()?,
-            repo: session.data.did,
-            rkey: rkey.to_string(),
+            repo: AtIdentifier::Did(session.data.did),
+            rkey: RecordKey::new(rkey.to_string()).map_err(|e| e.to_string())?,
             swap_commit: None,
             swap_record: None,
         }.into()).await?;
