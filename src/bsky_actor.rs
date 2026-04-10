@@ -1,10 +1,11 @@
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
+use atrium_api::app::bsky::bookmark::defs::BookmarkViewData;
+use atrium_api::app::bsky::bookmark::defs::BookmarkViewItemRefs;
 use atrium_api::app::bsky::embed::record::ViewRecordRefs;
 use atrium_api::app::bsky::feed::defs::PostViewData;
 use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
-use atrium_api::app::bsky::bookmark::defs::BookmarkViewItemRefs;
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
@@ -164,6 +165,18 @@ fn extract_post(post_view: &Object<PostViewData>) -> Post {
         quoted_post: quoted_post.map(|post| Box::new(post)),
         is_reply: post_record_data.reply.is_some()
     }
+}
+
+fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
+// 1. Access the union (assuming it follows standard ATProto union wrappers)
+        // 2. Match against the specific enum variant
+        match &bookmark.item {
+            Union::Refs(BookmarkViewItemRefs::AppBskyFeedDefsPostView(post)) => {
+                Some(extract_post(post.as_ref()))
+            }
+            // Return None for BlockedPost, NotFoundPost, or other union variants
+            _ => None
+        }
 }
 
 impl BskyJob {
@@ -423,13 +436,8 @@ impl BskyJob {
             }.into()).await?;
 
         Ok(RedskyUiMsg::RefreshBookmarksMsg {
-            posts: response.data.bookmarks.iter().filter_map(|bookmark| {
-                match &bookmark.data.item {
-                    Union::Refs(BookmarkViewItemRefs::AppBskyFeedDefsPostView(post_view)) => {
-                        Some(extract_post(post_view))
-                    }
-                    _ => None,
-                }
+            posts: response.data.bookmarks.iter().flat_map(|post_view| {
+                extract_post_from_bookmark(post_view)
             }).collect()
         })
     }
