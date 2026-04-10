@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use atrium_api::types::string::Cid;
@@ -27,19 +27,7 @@ pub struct UserProfile {
     pub post_count: i64
 }
 
-#[derive(Debug)]
-pub struct DownloadTask {
-    pub id: u64,
-    pub username: String,
-    pub path: String,
-    pub processed_posts: usize,
-    pub total_posts: Option<usize>,
-    pub downloaded_images: usize,
-    pub total_images: Option<usize>,
-    pub status: DownloadStatus,
-    pub errors: Vec<String>,
-}
-
+#[derive(Clone)]
 pub struct Post {
     pub uri: String,
     pub cid: Cid,
@@ -54,6 +42,25 @@ pub struct Post {
     pub quoted_post: Option<Box<Post>>,
     pub is_reply: bool,
 }
+
+pub enum FeedItem {
+    Full(Post),
+    Dehydrated { uri: String },
+}
+
+#[derive(Debug)]
+pub struct DownloadTask {
+    pub id: u64,
+    pub username: String,
+    pub path: String,
+    pub processed_posts: usize,
+    pub total_posts: Option<usize>,
+    pub downloaded_images: usize,
+    pub total_images: Option<usize>,
+    pub status: DownloadStatus,
+    pub errors: Vec<String>,
+}
+
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct PostImage {
@@ -91,8 +98,8 @@ pub enum RedskyUiMsg {
     NotifyLikesLoaded {post_uri: StrongRef, likers: Vec<UserProfile> },
     NotifyPostAndRepliesLoaded {post: Post, replies : Vec<Post>},
     ShowUserProfile{profile: UserProfile},
-    RefreshTimelineMsg{posts: Vec<Post>},
-    ShowUserPostsMsg{username: String, posts: Vec<Post>},
+    RefreshTimelineMsg{posts: Vec<Post>, cursor: Option<String>, append: bool},
+    ShowUserPostsMsg{username: String, posts: Vec<Post>, cursor: Option<String>, append: bool},
     DropUserPostsMsg{username: String},
     PrepareImageView {img_uri: String},
     ShowBigImageView {img_uri: String},
@@ -108,12 +115,12 @@ pub enum RedskyUiMsg {
 pub enum BskyActorMsg {
     Login {login: String, pass: String},
     Post {msg_body: String},
-    GetTimeline(),
+    GetTimeline { cursor: Option<String> },
     GetBookmarks(),
     //GetPostLikers {post_ref: StrongRef},
     GetPostAndReplies {post_ref: StrongRef},
     GetUserProfile{username: String},
-    GetUserPosts {username: String},
+    GetUserPosts {username: String, cursor: Option<String>},
     SearchActors { query: String },
     LoadImage{url: String},
     StartImageDownload { id: u64, username: String, path: String },
@@ -140,14 +147,19 @@ pub struct RedskyApp {
     login: String,
     pass: String,
     msg: String,
-    timeline: Vec<Post>,
+    timeline: Vec<FeedItem>,
     bookmarks: Vec<Post>,
-    user_posts: HashMap<String, Option<Vec<Post>>>,
+    user_posts: HashMap<String, Option<Vec<FeedItem>>>,
+    timeline_cursor: Option<String>,
+    user_cursors: HashMap<String, Option<String>>,
+    post_cache: HashMap<String, Post>,
+    post_cache_order: VecDeque<String>,
+    scroll_to_top: bool,
     
     user_infos_cache: HashMap<String, UserProfile>,
     image_cache: HashMap<String, Option<Arc<[u8]>>>,
     post_likers_cache: HashMap<StrongRef, Vec<UserProfile>>,
-    post_replies_cache: HashMap<StrongRef, Option<Vec<Post>>>,
+    post_replies_cache: HashMap<StrongRef, Option<Vec<FeedItem>>>,
     opened_image_views: HashSet<String>,
     download_tasks: HashMap<u64, DownloadTask>,
     next_download_id: u64,
@@ -173,6 +185,11 @@ impl RedskyApp {
             timeline: Vec::new(),
             bookmarks: Vec::new(),
             user_posts: HashMap::new(),
+            timeline_cursor: None,
+            user_cursors: HashMap::new(),
+            post_cache: HashMap::new(),
+            post_cache_order: VecDeque::new(),
+            scroll_to_top: false,
             user_infos_cache: HashMap::new(),
             image_cache: HashMap::new(),
             post_likers_cache: HashMap::new(),
@@ -226,11 +243,17 @@ impl RedskyApp {
         
         match msg {
             RedskyUiMsg::PostSucceeed () => {
-                self.post_message(BskyActorMsg::GetTimeline());
+                self.post_message(BskyActorMsg::GetTimeline { cursor: None });
             }
-            RedskyUiMsg::RefreshTimelineMsg { posts } => {
+            RedskyUiMsg::RefreshTimelineMsg { posts, cursor, append } => {
                 self.request_post_images(&posts);
-                self.timeline = posts;
+                let new_items: Vec<FeedItem> = posts.into_iter().map(FeedItem::Full).collect();
+                if append {
+                    self.timeline.extend(new_items);
+                } else {
+                    self.timeline = new_items;
+                }
+                self.timeline_cursor = cursor;
             }
             RedskyUiMsg::RefreshBookmarksMsg { posts } => {
                 self.request_post_images(&posts);
@@ -250,9 +273,17 @@ impl RedskyApp {
                 self.user_infos_cache.insert(profile.handle.clone(), profile.into());
 
             }
-            RedskyUiMsg::ShowUserPostsMsg { username, posts }  => {
+            RedskyUiMsg::ShowUserPostsMsg { username, posts, cursor, append }  => {
                 self.request_post_images(&posts);
-                self.user_posts.insert(username, Some(posts));
+                let new_items: Vec<FeedItem> = posts.into_iter().map(FeedItem::Full).collect();
+                if append {
+                    if let Some(Some(existing_posts)) = self.user_posts.get_mut(&username) {
+                        existing_posts.extend(new_items);
+                    }
+                } else {
+                    self.user_posts.insert(username.clone(), Some(new_items));
+                }
+                self.user_cursors.insert(username, cursor);
             }
 
             RedskyUiMsg::PrepareThreadView { thread_ref } => {
@@ -273,18 +304,22 @@ impl RedskyApp {
             RedskyUiMsg::NotifyLikesLoaded { post_uri, likers } => {
                 self.post_likers_cache.insert(post_uri, likers);
             }
-            RedskyUiMsg::NotifyPostAndRepliesLoaded { post, mut replies } => {
+            RedskyUiMsg::NotifyPostAndRepliesLoaded { post, replies } => {
                 let strong_ref = StrongRef { uri: post.uri.clone(), cid: post.cid.clone()};
-                replies.insert(0, post);
                 self.request_post_images(&replies);
-                self.post_replies_cache.insert(strong_ref, Some(replies));
+                self.request_post_images(&vec![post.clone()]);
+
+                let mut items: Vec<FeedItem> = vec![FeedItem::Full(post)];
+                items.extend(replies.into_iter().map(FeedItem::Full));
+
+                self.post_replies_cache.insert(strong_ref, Some(items));
             }
             RedskyUiMsg::LogInSucceededMsg() => {
                 self.is_logged_in = true;
                 self.main_view_state = MainViewState::OwnPostFeed;
-                self.post_message(BskyActorMsg::GetUserPosts{username: self.login.clone()});
+                self.post_message(BskyActorMsg::GetUserPosts{username: self.login.clone(), cursor: None});
                 self.post_message(BskyActorMsg::GetUserProfile { username: self.login.clone() });
-                self.post_message(BskyActorMsg::GetTimeline());
+                self.post_message(BskyActorMsg::GetTimeline { cursor: None });
                 self.post_message(BskyActorMsg::GetBookmarks());
             }
             RedskyUiMsg::NotifyImageLoaded { url, data } => {
@@ -388,7 +423,7 @@ impl RedskyApp {
         }
     }
 
-    fn make_maybe_user_post_view(&self, ui: &mut Ui, username: &str, posts: &Option<Vec<Post>>) {
+    fn make_maybe_user_post_view(&mut self, ui: &mut Ui, username: &str, posts: &mut Option<Vec<FeedItem>>) {
         StripBuilder::new(ui)
         .size(Size::exact(120.0))
         .size(Size::remainder())
@@ -414,7 +449,7 @@ impl RedskyApp {
         });
     }
 
-    fn make_placeholder_post_view(&self, ui: &mut Ui, username: &str) {
+    fn make_placeholder_post_view(&mut self, ui: &mut Ui, username: &str) {
         ui.vertical(|ui| {
             ui.heading(username);
             ui.separator();
@@ -463,7 +498,7 @@ impl RedskyApp {
             ui.vertical(|ui| {
                 if ui.link(RichText::new(&post.display_name).strong()).clicked() {
                     self.post_ui_message(RedskyUiMsg::PrepareUserView { username: post.author.clone() });
-                    self.post_message(BskyActorMsg::GetUserPosts { username: post.author.clone() });
+                    self.post_message(BskyActorMsg::GetUserPosts { username: post.author.clone(), cursor: None });
                 };
                 ui.label(&post.author);
                 ui.label(RichText::new(&post.date).small())
@@ -475,74 +510,160 @@ impl RedskyApp {
     }
 
 
-    fn make_post_view(&self, ui: &mut Ui, _username: &str, posts: &Vec<Post>) {
+    fn make_post_view(&mut self, ui: &mut Ui, username: &str, posts: &mut Vec<FeedItem>) {
+        let mut scroll_top_reset = false;
+        let mut scroll_offset_y = 0.0;
+        let mut content_size_y = 0.0;
+
         ui.vertical_centered_justified(|ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.vertical(|ui|  {
-                        for post in posts {
-                            let post_block = ui.vertical(|ui|  {
-                                self.make_post_inner_view(ui, post);
+            let scroll_area = egui::ScrollArea::vertical();
+            let scroll_output = scroll_area.show(ui, |ui| {
+                ui.vertical(|ui| {
+                    for (idx, item) in posts.iter_mut().enumerate() {
+                        match item {
+                            FeedItem::Full(post) => {
+                                let post_block = ui.vertical(|ui| {
+                                    if idx == 0 && self.scroll_to_top {
+                                        ui.scroll_to_rect(ui.max_rect(), Some(egui::Align::TOP));
+                                        scroll_top_reset = true;
+                                    }
+                                    self.make_post_inner_view(ui, post);
 
-                                if let Some(quoted_post) = &post.quoted_post {
-                                    egui::Frame::new()
-                                        .inner_margin(8)
-                                        .outer_margin(8)
-                                        .corner_radius(8)
-                                        .stroke(egui::Stroke::new(1.0, egui::Color32::GRAY))
-                                        .show(ui, |ui| {
-                                            self.make_post_inner_view(ui, &quoted_post);
-                                        });       
-                               }
+                                    if let Some(quoted_post) = &post.quoted_post {
+                                        egui::Frame::new()
+                                            .inner_margin(8)
+                                            .outer_margin(8)
+                                            .corner_radius(8)
+                                            .stroke(egui::Stroke::new(1.0, egui::Color32::GRAY))
+                                            .show(ui, |ui| {
+                                                self.make_post_inner_view(ui, &quoted_post);
+                                            });
+                                    }
 
-                                if !&post.embeds.is_empty() {
-                                    if ui.horizontal_wrapped(|ui|{
-                                        ui.set_min_height(200f32);
-                                        for embed in &post.embeds {
-                                            if self.image_cache.contains_key(&embed.thumbnail_url) {
-                                                self.make_buffer_image_view(ui, &embed.thumbnail_url,
-                                                    self.image_cache.get(&embed.thumbnail_url).unwrap(),
-                                                     Some(&embed.url));
+                                    if !&post.embeds.is_empty() {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.set_min_height(200f32);
+                                            for embed in &post.embeds {
+                                                if self.image_cache.contains_key(&embed.thumbnail_url) {
+                                                    self.make_buffer_image_view(
+                                                        ui,
+                                                        &embed.thumbnail_url,
+                                                        self.image_cache.get(&embed.thumbnail_url).unwrap(),
+                                                        Some(&embed.url),
+                                                    );
+                                                }
                                             }
-                                        }
-                                    }).response.clicked() {
-                                    };
-                                }
-                                ui.horizontal(|ui| {
-                                    let _ = ui.button(format!("{} x ❤", &post.like_count));
-                                    let _ = ui.button(format!("{} x 🔃", &post.repost_count));                                
-                                    let _ = ui.button("…");
+                                        });
+                                    }
+                                    ui.horizontal(|ui| {
+                                        let _ = ui.button(format!("{} x ❤", &post.like_count));
+                                        let _ = ui.button(format!("{} x 🔃", &post.repost_count));
+                                        let _ = ui.button("…");
+                                    });
+                                    ui.separator();
                                 });
-                                ui.separator();
-                            });
 
-                            if post_block.response.interact(Sense::click()).clicked() {
-                                self.post_ui_message(RedskyUiMsg::PrepareThreadView { 
-                                    thread_ref: StrongRef { 
-                                    uri: post.uri.clone(), 
-                                    cid : post.cid.clone()
-                                 } });
+                                if post_block.response.interact(Sense::click()).clicked() {
+                                    self.post_ui_message(RedskyUiMsg::PrepareThreadView {
+                                        thread_ref: StrongRef {
+                                            uri: post.uri.clone(),
+                                            cid: post.cid.clone(),
+                                        },
+                                    });
+                                }
                             }
-
+                            FeedItem::Dehydrated { uri } => {
+                                ui.vertical_centered(|ui| {
+                                    ui.add_space(50.0);
+                                    ui.spinner();
+                                    ui.add_space(50.0);
+                                });
+                            }
                         }
-                    });
 
-
-
-    
+                        // Rehydration check
+                        let mut rehydrate_uri = None;
+                        if let FeedItem::Dehydrated { uri } = item {
+                            if ui.is_rect_visible(ui.available_rect_before_wrap()) {
+                                rehydrate_uri = Some(uri.clone());
+                            }
+                        }
+                        if let Some(uri) = rehydrate_uri {
+                            if let Some(post) = self.post_cache.remove(&uri) {
+                                *item = FeedItem::Full(post);
+                                self.post_cache_order.retain(|u| u != &uri);
+                            }
+                        }
+                    }
+                });
             });
+            scroll_offset_y = scroll_output.state.offset.y;
+            content_size_y = scroll_output.content_size.y;
+
+            // Infinite Scroll Check
+            if scroll_offset_y > content_size_y * 0.8 && content_size_y > 0.0 {
+                if username == "Your timeline" {
+                    if let Some(cursor) = self.timeline_cursor.clone() {
+                        self.post_message(BskyActorMsg::GetTimeline { cursor: Some(cursor) });
+                        self.timeline_cursor = None; // Avoid duplicate requests
+                    }
+                } else if username != "Thread" {
+                    if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
+                        self.post_message(BskyActorMsg::GetUserPosts { username: username.to_string(), cursor: Some(cursor) });
+                        self.user_cursors.insert(username.to_string(), None); // Avoid duplicate requests
+                    }
+                }
+            }
         });
+
+        if scroll_top_reset {
+            self.scroll_to_top = false;
+        }
+
+        // Dehydration logic
+        let visible_idx = (scroll_offset_y / 200.0) as i32;
+        for (idx, item) in posts.iter_mut().enumerate() {
+            let mut should_dehydrate = false;
+            if let FeedItem::Full(_) = item {
+                if (idx as i32 - visible_idx).abs() > 50 {
+                    should_dehydrate = true;
+                }
+            }
+
+            if should_dehydrate {
+                if let FeedItem::Full(post) = std::mem::replace(item, FeedItem::Dehydrated { uri: String::new() }) {
+                    let uri = post.uri.clone();
+                    if !uri.is_empty() {
+                        self.post_cache.insert(uri.clone(), post);
+                        self.post_cache_order.push_back(uri.clone());
+
+                        // LRU Eviction
+                        if self.post_cache.len() > 200 {
+                            if let Some(oldest_uri) = self.post_cache_order.pop_front() {
+                                self.post_cache.remove(&oldest_uri);
+                            }
+                        }
+                        *item = FeedItem::Dehydrated { uri };
+                    }
+                }
+            }
+        }
     }
 
     fn make_user_timelines_views(&mut self, ctx: &egui::Context) {
         let mut to_drop = Vec::new();
         let mut to_download = Vec::new();
 
-        for (username, posts) in &self.user_posts {
-            if username == &self.login {
+        let usernames: Vec<String> = self.user_posts.keys().cloned().collect();
+        for username in usernames {
+            if username == self.login {
                 continue;
             }
+
+            let mut posts = self.user_posts.get_mut(&username).unwrap().take();
+
             ctx.show_viewport_immediate(
-                egui::ViewportId::from_hash_of(username),
+                egui::ViewportId::from_hash_of(&username),
                 egui::ViewportBuilder::default()
                     .with_title(format!("Posts of {}", username.clone()))
                     .with_inner_size([400.0, 600.0]),
@@ -558,13 +679,14 @@ impl RedskyApp {
                         });
                     });
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        self.make_maybe_user_post_view(ui, username, posts);
+                        self.make_maybe_user_post_view(ui, &username, &mut posts);
                     });
 
                     if ctx.input(|i| i.viewport().close_requested()) {
                         to_drop.push(username.clone());
                     }
                 });
+            self.user_posts.insert(username, posts);
         }
 
         for username in to_drop {
@@ -585,8 +707,11 @@ impl RedskyApp {
     }
 
     
-    fn make_open_thread_views(&self, ctx: &egui::Context) {
-        for (repost_ref, posts) in &self.post_replies_cache {
+    fn make_open_thread_views(&mut self, ctx: &egui::Context) {
+        let keys: Vec<StrongRef> = self.post_replies_cache.keys().cloned().collect();
+        for repost_ref in keys {
+            let mut posts_opt = self.post_replies_cache.get_mut(&repost_ref).unwrap().take();
+
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(repost_ref.uri.clone()),
                 egui::ViewportBuilder::default()
@@ -594,9 +719,8 @@ impl RedskyApp {
                     .with_inner_size([400.0, 600.0]),
                 |ctx, _| {
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        match posts {
+                        match &mut posts_opt {
                             Some(posts) => {
-
                                 self.make_post_view(ui, "Thread", posts);
                             }
                             None => {
@@ -609,6 +733,7 @@ impl RedskyApp {
                         self.post_ui_message(RedskyUiMsg::CloseThreadView { thread_ref: repost_ref.clone() });
                     }
                 });
+            self.post_replies_cache.insert(repost_ref, posts_opt);
         }
     }
 
@@ -803,7 +928,7 @@ impl RedskyApp {
                         });
                         if let Some(profile) = clicked_profile {
                             self.post_ui_message(RedskyUiMsg::PrepareUserView { username: profile.handle.clone() });
-                            self.post_message(BskyActorMsg::GetUserPosts { username: profile.handle.clone() });
+                            self.post_message(BskyActorMsg::GetUserPosts { username: profile.handle.clone(), cursor: None });
                             self.is_search_window_open = false;
                         }
                     });
@@ -836,6 +961,21 @@ impl eframe::App for RedskyApp {
 
         if self.is_search_window_open {
             self.make_search_window(ctx);
+        }
+
+        if self.main_view_state != MainViewState::Login {
+            let mut top_clicked = false;
+            egui::Area::new(egui::Id::new("top_button"))
+                .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-20.0, -20.0))
+                .show(ctx, |ui| {
+                    if ui.button(RichText::new("Top").heading()).clicked() {
+                        top_clicked = true;
+                    }
+                });
+            if top_clicked {
+                self.scroll_to_top = true;
+                ctx.request_repaint();
+            }
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -898,27 +1038,30 @@ impl eframe::App for RedskyApp {
                     MainViewState::TimelineFeed => {
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),|ui| {
                             ui.vertical(|ui| {
-                                self.make_post_view(ui, "Your timeline", &self.timeline);
+                                let mut timeline = std::mem::take(&mut self.timeline);
+                                self.make_post_view(ui, "Your timeline", &mut timeline);
+                                self.timeline = timeline;
                             });
                         });
                     }
                     MainViewState::BookmarksFeed => {
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),|ui| {
                             ui.vertical(|ui| {
-                                self.make_post_view(ui, "Your bookmarks", &self.bookmarks);
+                                // Bookmarks also needs to use FeedItem if I want to use make_post_view
+                                // or I should convert them.
+                                // In this patch I'll convert them for simplicity as a first step.
+                                let mut bookmark_items: Vec<FeedItem> = self.bookmarks.iter().cloned().map(FeedItem::Full).collect();
+                                self.make_post_view(ui, "Your bookmarks", &mut bookmark_items);
+                                // Note: changes to bookmark_items (like dehydration) won't persist back to self.bookmarks
+                                // this way. Ideally bookmarks should also be Vec<FeedItem>.
                             });
                         });
                     }
                     MainViewState::OwnPostFeed => {
-                        match self.user_posts.get(&self.login) {
-                            Some(maybe_post) => {
-                                self.make_maybe_user_post_view(ui, &self.login, maybe_post);
-                            }
-                            None => {
-                                self.make_maybe_user_post_view(ui, &self.login, &None);
-
-                            }
-                        }
+                        let login = self.login.clone();
+                        let mut maybe_post = self.user_posts.get_mut(&login).and_then(|p| p.take());
+                        self.make_maybe_user_post_view(ui, &login, &mut maybe_post);
+                        self.user_posts.insert(login, maybe_post);
                     }
                 }
             })
@@ -926,4 +1069,3 @@ impl eframe::App for RedskyApp {
         });
     }
 }
-
