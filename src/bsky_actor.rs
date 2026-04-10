@@ -1,6 +1,8 @@
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
+use atrium_api::app::bsky::bookmark::defs::BookmarkViewData;
+use atrium_api::app::bsky::bookmark::defs::BookmarkViewItemRefs;
 use atrium_api::app::bsky::embed::record::ViewRecordRefs;
 use atrium_api::app::bsky::feed::defs::PostViewData;
 use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
@@ -169,6 +171,18 @@ fn extract_post(post_view: &Object<PostViewData>) -> Post {
     }
 }
 
+fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
+// 1. Access the union (assuming it follows standard ATProto union wrappers)
+        // 2. Match against the specific enum variant
+        match &bookmark.item {
+            Union::Refs(BookmarkViewItemRefs::AppBskyFeedDefsPostView(post)) => {
+                Some(extract_post(post.as_ref()))
+            }
+            // Return None for BlockedPost, NotFoundPost, or other union variants
+            _ => None
+        }
+}
+
 impl BskyJob {
     pub async fn perform(self) -> () {
         let result = match &self.job {
@@ -239,6 +253,7 @@ impl BskyJob {
         self.ctx.request_repaint();
     }
 
+    #[allow(dead_code)]
     async fn get_post_likers(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get likers");
 
@@ -526,15 +541,15 @@ impl BskyJob {
             .api
             .app
             .bsky
-            .feed
-            .get_bookmarks(atrium_api::app::bsky::feed::get_bookmarks::ParametersData {
+            .bookmark
+            .get_bookmarks(atrium_api::app::bsky::bookmark::get_bookmarks::ParametersData {
                 cursor: None,
                 limit: 30.try_into().ok(),
             }.into()).await?;
 
         Ok(RedskyUiMsg::RefreshBookmarksMsg {
-            posts: response.data.posts.iter().map(|post_view| {
-                extract_post(post_view)
+            posts: response.data.bookmarks.iter().flat_map(|post_view| {
+                extract_post_from_bookmark(post_view)
             }).collect()
         })
     }

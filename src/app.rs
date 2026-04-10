@@ -52,6 +52,7 @@ pub enum FeedItem {
 
 #[derive(Debug)]
 pub struct DownloadTask {
+    #[allow(dead_code)]
     pub id: u64,
     pub username: String,
     pub path: String,
@@ -97,6 +98,7 @@ pub enum RedskyUiMsg {
     PrepareThreadView{thread_ref: StrongRef},
     CloseThreadView{thread_ref: StrongRef},
     NotifyImageLoaded{url: String, data: Arc<[u8]>},
+    #[allow(dead_code)]
     NotifyLikesLoaded {post_uri: StrongRef, likers: Vec<UserProfile> },
     NotifyRepostersLoaded {post_uri: StrongRef, reposters: Vec<UserProfile> },
     CloseLikesView { post_uri: StrongRef },
@@ -139,6 +141,7 @@ pub enum BskyActorMsg {
     LoadImage{url: String},
     StartImageDownload { id: u64, username: String, path: String },
     CancelImageDownload { id: u64 },
+    #[allow(dead_code)]
     Close()
 }
 
@@ -774,7 +777,7 @@ impl RedskyApp {
                                     });
                                 }
                             }
-                            FeedItem::Dehydrated { uri } => {
+                            FeedItem::Dehydrated { uri: _ } => {
                                 ui.vertical_centered(|ui| {
                                     ui.add_space(50.0);
                                     ui.spinner();
