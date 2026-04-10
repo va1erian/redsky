@@ -1,7 +1,6 @@
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
-use atrium_api::app::bsky::bookmark;
 use atrium_api::app::bsky::bookmark::defs::BookmarkViewData;
 use atrium_api::app::bsky::bookmark::defs::BookmarkViewItemRefs;
 use atrium_api::app::bsky::embed::record::ViewRecordRefs;
@@ -235,6 +234,7 @@ impl BskyJob {
         self.ctx.request_repaint();
     }
 
+    #[allow(dead_code)]
     async fn get_post_likers(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get likers");
 
