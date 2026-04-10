@@ -258,8 +258,8 @@ impl RedskyApp {
         }
     }
 
-    fn update_post_optimistically<F>(&mut self, post_uri: &str, update_fn: F)
-    where F: Fn(&mut Post) {
+    fn update_post_optimistically<F>(&mut self, post_uri: &str, mut update_fn: F)
+    where F: FnMut(&mut Post) {
         // Update timeline
         for item in &mut self.timeline {
             if let FeedItem::Full(post) = item {
