@@ -315,7 +315,7 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyRepostersLoaded { post_uri: strong_ref.clone(), reposters })
     }
 
-    async fn like(&self, strong_ref: StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn like(&self, strong_ref: &StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("liking post");
         let post_uri = strong_ref.uri.clone();
         let response = self.bsky_agent.create_record(atrium_api::app::bsky::feed::like::RecordData {
@@ -324,6 +324,7 @@ impl BskyJob {
                 cid: strong_ref.cid,
                 uri: strong_ref.uri,
             }.into(),
+            via: None,
         }).await?;
         Ok(RedskyUiMsg::NotifyLikeActionSucceeded {
             post_uri,
@@ -331,22 +332,22 @@ impl BskyJob {
         })
     }
 
-    async fn unlike(&self, _post_uri: String, like_record_uri: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn unlike(&self, _post_uri: &String, like_record_uri: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("unliking post");
         let parts: Vec<&str> = like_record_uri.split('/').collect();
         let rkey = parts.last().ok_or("Invalid like record URI")?;
 
-        self.bsky_agent.api.com.atproto::repo::delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
+        self.bsky_agent.delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
             collection: "app.bsky.feed.like".parse()?,
             repo: self.bsky_agent.who_am_i().await?.did,
-            rkey: rkey.to_string(),
+            rkey: rkey.parse()?,
             swap_commit: None,
             swap_record: None,
         }.into()).await?;
         Ok(RedskyUiMsg::ActionSucceeded())
     }
 
-    async fn repost(&self, strong_ref: StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn repost(&self, strong_ref: &StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("reposting post");
         let post_uri = strong_ref.uri.clone();
         let response = self.bsky_agent.create_record(atrium_api::app::bsky::feed::repost::RecordData {
@@ -355,6 +356,7 @@ impl BskyJob {
                 cid: strong_ref.cid,
                 uri: strong_ref.uri,
             }.into(),
+            via: None,
         }).await?;
         Ok(RedskyUiMsg::NotifyRepostActionSucceeded {
             post_uri,
@@ -362,15 +364,15 @@ impl BskyJob {
         })
     }
 
-    async fn unrepost(&self, _post_uri: String, repost_record_uri: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn unrepost(&self, _post_uri: &String, repost_record_uri: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("unreposting post");
         let parts: Vec<&str> = repost_record_uri.split('/').collect();
         let rkey = parts.last().ok_or("Invalid repost record URI")?;
 
-        self.bsky_agent.api.com.atproto::repo::delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
+        self.bsky_agent.delete_record(atrium_api::com::atproto::repo::delete_record::InputData {
             collection: "app.bsky.feed.repost".parse()?,
             repo: self.bsky_agent.who_am_i().await?.did,
-            rkey: rkey.to_string(),
+            rkey: rkey.parse()?,
             swap_commit: None,
             swap_record: None,
         }.into()).await?;
