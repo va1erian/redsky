@@ -192,6 +192,9 @@ impl BskyJob {
             BskyActorMsg::SearchActors { query } => {
                 self.search_actors(query).await
             }
+            BskyActorMsg::SearchActors { query } => {
+                self.search_actors(query).await
+            }
             BskyActorMsg::LoadImage { url } => {
                 self.load_image(url).await
             }
