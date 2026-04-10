@@ -182,7 +182,10 @@ impl BskyJob {
             //}
             BskyActorMsg::GetTimeline() => {
                 self.get_timeline_posts().await
-            }            
+            }
+            BskyActorMsg::GetBookmarks() => {
+                self.get_bookmarks().await
+            }
             BskyActorMsg::GetUserProfile { username } => {
                 self.get_user_profile(username).await
             }
@@ -397,6 +400,26 @@ impl BskyJob {
             { 
                 posts: posts.data.feed.iter().map(|feed_element| {
                    extract_post(&feed_element.post)
+            }).collect()
+        })
+    }
+
+    async fn get_bookmarks(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("get bookmarks");
+
+        let response = self.bsky_agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_bookmarks(atrium_api::app::bsky::feed::get_bookmarks::ParametersData {
+                cursor: None,
+                limit: 30.try_into().ok(),
+            }.into()).await?;
+
+        Ok(RedskyUiMsg::RefreshBookmarksMsg {
+            posts: response.data.posts.iter().map(|post_view| {
+                extract_post(post_view)
             }).collect()
         })
     }

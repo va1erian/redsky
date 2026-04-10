@@ -83,6 +83,7 @@ pub enum DownloadStatus {
 pub enum RedskyUiMsg {
     LogInSucceededMsg(),
     PostSucceeed(),
+    RefreshBookmarksMsg{posts: Vec<Post>},
     PrepareUserView{username: String},
     PrepareThreadView{thread_ref: StrongRef},
     CloseThreadView{thread_ref: StrongRef},
@@ -108,6 +109,7 @@ pub enum BskyActorMsg {
     Login {login: String, pass: String},
     Post {msg_body: String},
     GetTimeline(),
+    GetBookmarks(),
     //GetPostLikers {post_ref: StrongRef},
     GetPostAndReplies {post_ref: StrongRef},
     GetUserProfile{username: String},
@@ -123,7 +125,8 @@ pub enum BskyActorMsg {
 enum MainViewState {
     Login,
     TimelineFeed,
-    OwnPostFeed
+    OwnPostFeed,
+    BookmarksFeed
 }
 
 pub struct RedskyApp {
@@ -138,6 +141,7 @@ pub struct RedskyApp {
     pass: String,
     msg: String,
     timeline: Vec<Post>,
+    bookmarks: Vec<Post>,
     user_posts: HashMap<String, Option<Vec<Post>>>,
     
     user_infos_cache: HashMap<String, UserProfile>,
@@ -167,6 +171,7 @@ impl RedskyApp {
             pass: String::new(),
             msg: String::new(),
             timeline: Vec::new(),
+            bookmarks: Vec::new(),
             user_posts: HashMap::new(),
             user_infos_cache: HashMap::new(),
             image_cache: HashMap::new(),
@@ -227,6 +232,10 @@ impl RedskyApp {
                 self.request_post_images(&posts);
                 self.timeline = posts;
             }
+            RedskyUiMsg::RefreshBookmarksMsg { posts } => {
+                self.request_post_images(&posts);
+                self.bookmarks = posts;
+            }
             RedskyUiMsg::PrepareUserView { username } => {
                 self.user_posts.insert(username.clone(), None);
                 self.post_message(BskyActorMsg::GetUserProfile { username });
@@ -276,6 +285,7 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::GetUserPosts{username: self.login.clone()});
                 self.post_message(BskyActorMsg::GetUserProfile { username: self.login.clone() });
                 self.post_message(BskyActorMsg::GetTimeline());
+                self.post_message(BskyActorMsg::GetBookmarks());
             }
             RedskyUiMsg::NotifyImageLoaded { url, data } => {
                 self.image_cache.insert(url.clone(), Some(data));
@@ -851,7 +861,9 @@ impl eframe::App for RedskyApp {
                             ui.selectable_value(&mut self.main_view_state, 
                                 MainViewState::OwnPostFeed, RichText::new("Profile").heading());
                             ui.selectable_value(&mut self.main_view_state,
-                                MainViewState::TimelineFeed, RichText::new("Timeline feed").heading())
+                                MainViewState::TimelineFeed, RichText::new("Timeline feed").heading());
+                            ui.selectable_value(&mut self.main_view_state,
+                                MainViewState::BookmarksFeed, RichText::new("Bookmarks").heading())
                             });
                         ui.separator();
                     });
@@ -887,6 +899,13 @@ impl eframe::App for RedskyApp {
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),|ui| {
                             ui.vertical(|ui| {
                                 self.make_post_view(ui, "Your timeline", &self.timeline);
+                            });
+                        });
+                    }
+                    MainViewState::BookmarksFeed => {
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),|ui| {
+                            ui.vertical(|ui| {
+                                self.make_post_view(ui, "Your bookmarks", &self.bookmarks);
                             });
                         });
                     }
