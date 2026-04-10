@@ -199,14 +199,20 @@ impl BskyJob {
             BskyActorMsg::Unrepost { post_uri, repost_record_uri } => {
                 self.unrepost(post_uri, repost_record_uri).await
             }
-            BskyActorMsg::GetTimeline() => {
-                self.get_timeline_posts().await
-            }            
+            BskyActorMsg::GetTimeline { cursor } => {
+                self.get_timeline_posts(cursor).await
+            }
+            BskyActorMsg::GetBookmarks() => {
+                self.get_bookmarks().await
+            }
             BskyActorMsg::GetUserProfile { username } => {
                 self.get_user_profile(username).await
             }
-            BskyActorMsg::GetUserPosts { username } => {
-                self.get_user_posts(username).await
+            BskyActorMsg::GetUserPosts { username, cursor } => {
+                self.get_user_posts(username, cursor).await
+            }
+            BskyActorMsg::SearchActors { query } => {
+                self.search_actors(query).await
             }
             BskyActorMsg::LoadImage { url } => {
                 self.load_image(url).await
@@ -410,7 +416,35 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyImageLoaded { url: url.to_string(), data: bytes.to_vec().into() })
     }
 
-    async fn get_user_posts(&self, username: &String)  -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn search_actors(&self, query: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("search actors", &query);
+        let response = self.bsky_agent
+            .api
+            .app
+            .bsky
+            .actor
+            .search_actors_typeahead(atrium_api::app::bsky::actor::search_actors_typeahead::ParametersData {
+                limit: 10.try_into().ok(),
+                q: Some(query.clone()),
+                term: None // DEPRECATED: use 'q' instead.
+            }.into()).await?;
+
+        let results = response.data.actors.iter().map(|actor| {
+            UserProfile {
+                handle: actor.handle.to_string(),
+                display_name: actor.display_name.clone().unwrap_or("(no display name)".to_string()),
+                bio: "".to_string(),
+                avatar_uri: actor.avatar.clone().unwrap_or("".to_string()),
+                follower_count: 0,
+                follow_count: 0,
+                post_count: 0
+            }
+        }).collect();
+
+        Ok(RedskyUiMsg::ShowSearchResults { results })
+    }
+
+    async fn get_user_posts(&self, username: &String, cursor: &Option<String>)  -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get user posts");
         let at_uri = format!("at://{}", username);
         dbg!(&at_uri);
@@ -421,17 +455,19 @@ impl BskyJob {
         .feed
         .get_author_feed(atrium_api::app::bsky::feed::get_author_feed::ParametersData {
             actor: AtIdentifier::Handle(username.parse().map_err(|e| format!("Invalid handle: {}", e))?),
-            cursor: None,
+            cursor: cursor.clone(),
             filter: None,
             include_pins: Some(true),
-            limit: 20.try_into().ok()
+            limit: 30.try_into().ok()
         }.into()).await?;
 
         Ok(RedskyUiMsg::ShowUserPostsMsg{
             username: username.to_string(),
             posts: response.data.feed.iter().map(|post_el: &atrium_api::types::Object<atrium_api::app::bsky::feed::defs::FeedViewPostData>| {
                 extract_post(&post_el.post)
-        }).collect()
+        }).collect(),
+            cursor: response.data.cursor,
+            append: cursor.is_some()
         })
     }
 
@@ -459,24 +495,46 @@ impl BskyJob {
         }})
     }
 
-    async fn get_timeline_posts(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_timeline_posts(&self, cursor: &Option<String>) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get tl");
 
-        let posts = self.bsky_agent
+        let response = self.bsky_agent
         .api
         .app
         .bsky
         .feed
         .get_timeline( atrium_api::app::bsky::feed::get_timeline::ParametersData{
             algorithm: None,
-            cursor: None,
+            cursor: cursor.clone(),
             limit: 30.try_into().ok()
         }.into()).await?;
 
         Ok(RedskyUiMsg::RefreshTimelineMsg 
             { 
-                posts: posts.data.feed.iter().map(|feed_element| {
+                posts: response.data.feed.iter().map(|feed_element| {
                    extract_post(&feed_element.post)
+            }).collect(),
+                cursor: response.data.cursor,
+                append: cursor.is_some()
+        })
+    }
+
+    async fn get_bookmarks(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("get bookmarks");
+
+        let response = self.bsky_agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_bookmarks(atrium_api::app::bsky::feed::get_bookmarks::ParametersData {
+                cursor: None,
+                limit: 30.try_into().ok(),
+            }.into()).await?;
+
+        Ok(RedskyUiMsg::RefreshBookmarksMsg {
+            posts: response.data.posts.iter().map(|post_view| {
+                extract_post(post_view)
             }).collect()
         })
     }
