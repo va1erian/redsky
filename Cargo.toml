@@ -24,3 +24,5 @@ rfd = "0.15"
 strip = true 
 opt-level = "z"
 
+[build-dependencies]
+winres = "0.1.12"

@@ -34,11 +34,44 @@ jobs:
     - name: Build
       run: cargo build --release
 
-    - name: Zip executable (Unix)
-      if: runner.os != 'Windows'
+    - name: Zip executable (Linux)
+      if: runner.os == 'Linux'
       run: |
         cd target/release
         zip redsky-${{ runner.os }}.zip redsky
+
+    - name: Create macOS bundle and DMG
+      if: runner.os == 'macOS'
+      run: |
+        mkdir -p redsky.app/Contents/MacOS
+        mkdir -p redsky.app/Contents/Resources
+        cp target/release/redsky redsky.app/Contents/MacOS/
+        cp resources/redsky.icns redsky.app/Contents/Resources/
+        cat << 'APP_EOF' > redsky.app/Contents/Info.plist
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>redsky</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.github.redsky</string>
+            <key>CFBundleName</key>
+            <string>Redsky</string>
+            <key>CFBundleIconFile</key>
+            <string>redsky.icns</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.1.0</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.12</string>
+        </dict>
+        </plist>
+        APP_EOF
+
+        npm install -g create-dmg
+        create-dmg redsky.app redsky.dmg || true
 
     - name: Zip executable (Windows)
       if: runner.os == 'Windows'
@@ -46,7 +79,15 @@ jobs:
         cd target/release
         Compress-Archive -Path redsky.exe -DestinationPath redsky-${{ runner.os }}.zip
 
-    - name: Upload Release Asset
+    - name: Upload Release Asset (Linux and Windows)
+      if: runner.os != 'macOS'
       uses: softprops/action-gh-release@v2
       with:
         files: target/release/redsky-${{ runner.os }}.zip
+
+    - name: Upload Release Asset (macOS)
+      if: runner.os == 'macOS'
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          redsky.dmg
