@@ -1,10 +1,7 @@
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Arc;
+use std::hash::Hash;
 use atrium_api::types::string::Cid;
-use egui::load::Bytes;
-use egui::{vec2, Align, ImageSource, Layout, Sense, UiBuilder};
+use egui::{vec2, Align, Layout, Sense, UiBuilder};
 use egui::{RichText, Ui};
 use egui_extras::{Size, StripBuilder};
 use std::sync::mpsc::Receiver;
@@ -97,7 +94,7 @@ pub enum RedskyUiMsg {
     PrepareUserView{username: String},
     PrepareThreadView{thread_ref: StrongRef},
     CloseThreadView{thread_ref: StrongRef},
-    NotifyImageLoaded{url: String, data: Arc<[u8]>},
+    NotifyImageLoaded{url: String, data: egui::ColorImage},
     #[allow(dead_code)]
     NotifyLikesLoaded {post_uri: StrongRef, likers: Vec<UserProfile> },
     NotifyRepostersLoaded {post_uri: StrongRef, reposters: Vec<UserProfile> },
@@ -174,7 +171,7 @@ pub struct RedskyApp {
     scroll_to_top: bool,
     
     user_infos_cache: HashMap<String, UserProfile>,
-    image_cache: HashMap<String, Option<Arc<[u8]>>>,
+    image_cache: HashMap<String, Option<egui::TextureHandle>>,
     post_likers_cache: HashMap<StrongRef, Vec<UserProfile>>,
     post_reposters_cache: HashMap<StrongRef, Vec<UserProfile>>,
     post_replies_cache: HashMap<StrongRef, Option<Vec<FeedItem>>>,
@@ -331,7 +328,7 @@ impl RedskyApp {
         }
     }
 
-    fn process_message(&mut self, msg: RedskyUiMsg) -> () {
+    fn process_message(&mut self, ctx: &egui::Context, msg: RedskyUiMsg) -> () {
         
         match msg {
             RedskyUiMsg::ActionSucceeded () => {
@@ -476,7 +473,8 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::GetBookmarks());
             }
             RedskyUiMsg::NotifyImageLoaded { url, data } => {
-                self.image_cache.insert(url.clone(), Some(data));
+                let texture = ctx.load_texture(&url, data, Default::default());
+                self.image_cache.insert(url.clone(), Some(texture));
                 println!("image {} loaded", url);
             }
             RedskyUiMsg::ShowBigImageView { img_uri }  => {
@@ -532,20 +530,12 @@ impl RedskyApp {
                 ui.horizontal(|ui| {
                     ui.set_max_height(120f32);
                     match self.image_cache.get(&profile.avatar_uri) {
-                        Some(Some(img)) => {
-                            let mut s = DefaultHasher::new();
-                            profile.avatar_uri.hash(&mut s);
-                            let hash = s.finish();
-                            let image_id = format!("bytes://{}.jpg", hash);
-
-                                ui.vertical(|ui| {
-                                    ui.set_max_width(120f32);
-                                    ui.set_max_height(120f32);
-                                    ui.image(ImageSource::Bytes { 
-                                        uri: Cow::from(image_id), 
-                                        bytes: Bytes::Shared(img.clone())
-                                    });
-                                });
+                        Some(Some(texture)) => {
+                            ui.vertical(|ui| {
+                                ui.set_max_width(120f32);
+                                ui.set_max_height(120f32);
+                                ui.add(egui::Image::new(texture).max_width(120.0).max_height(120.0));
+                            });
                         }
                         Some(None) => {
                             ui.vertical(|ui| {
@@ -610,17 +600,9 @@ impl RedskyApp {
         });
     }
 
-    fn make_buffer_image_view(&self, ui: &mut Ui, image_uri: &String, img_data: &Option<Arc<[u8]>>, full_view_uri: Option<&String>) {
-        let mut s = DefaultHasher::new();
-        image_uri.hash(&mut s);
-        let hash = s.finish();
-        let image_id = format!("bytes://{}.jpg", hash);
-
-        if  let Some(data) = img_data {
-            let img_view = ui.image(ImageSource::Bytes { 
-                uri: Cow::from(image_id), 
-                bytes: Bytes::Shared(data.clone())
-            });
+    fn make_buffer_image_view(&self, ui: &mut Ui, _image_uri: &String, img_data: &Option<egui::TextureHandle>, full_view_uri: Option<&String>) {
+        if let Some(texture) = img_data {
+            let img_view = ui.add(egui::Image::new(texture).max_width(ui.available_width()));
             let sensing_img = img_view.interact(egui::Sense::click());
     
             if sensing_img.clicked() {
@@ -1197,7 +1179,7 @@ impl eframe::App for RedskyApp {
         
 
         while let Ok(msg) = self.rx.try_recv() {
-            self.process_message(msg);
+            self.process_message(ctx, msg);
         }
         
         self.make_user_timelines_views(ctx);

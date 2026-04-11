@@ -428,10 +428,21 @@ impl BskyJob {
     }
 
     async fn load_image(&self, url: &String) -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
-        let resp = reqwest::get(url)
-        .await?;
+        let url_clone = url.clone();
+        let resp = reqwest::get(url).await?;
         let bytes = resp.bytes().await?;
-        Ok(RedskyUiMsg::NotifyImageLoaded { url: url.to_string(), data: bytes.to_vec().into() })
+        let color_image = tokio::task::spawn_blocking(move || {
+            let image = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+            let size = [image.width() as _, image.height() as _];
+            let image_buffer = image.into_rgba8();
+            let pixels = image_buffer.as_flat_samples();
+            Ok::<egui::ColorImage, String>(egui::ColorImage::from_rgba_unmultiplied(
+                size,
+                pixels.as_slice(),
+            ))
+        }).await.map_err(|e| e.to_string())??;
+
+        Ok(RedskyUiMsg::NotifyImageLoaded { url: url_clone, data: color_image })
     }
 
     async fn search_actors(&self, query: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
