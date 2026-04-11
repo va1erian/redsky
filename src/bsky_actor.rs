@@ -252,8 +252,6 @@ impl BskyJob {
 
     #[allow(dead_code)]
     async fn get_post_likers(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("get likers");
-
         let response = self.bsky_agent
         .api
         .app
@@ -283,8 +281,6 @@ impl BskyJob {
     }
 
     async fn get_post_reposted_by(&self, strong_ref: &StrongRef)  -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("get reposters");
-
         let response = self.bsky_agent
         .api
         .app
@@ -313,7 +309,6 @@ impl BskyJob {
     }
 
     async fn like(&self, strong_ref: StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("liking post");
         let post_uri = strong_ref.uri.clone();
         let response = self.bsky_agent.create_record(atrium_api::app::bsky::feed::like::RecordData {
             created_at: Datetime::now(),
@@ -330,7 +325,6 @@ impl BskyJob {
     }
 
     async fn unlike(&self, _post_uri: String, like_record_uri: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("unliking post");
         let parts: Vec<&str> = like_record_uri.split('/').collect();
         let rkey = parts.last().ok_or("Invalid like record URI")?;
 
@@ -347,7 +341,6 @@ impl BskyJob {
     }
 
     async fn repost(&self, strong_ref: StrongRef) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("reposting post");
         let post_uri = strong_ref.uri.clone();
         let response = self.bsky_agent.create_record(atrium_api::app::bsky::feed::repost::RecordData {
             created_at: Datetime::now(),
@@ -364,7 +357,6 @@ impl BskyJob {
     }
 
     async fn unrepost(&self, _post_uri: String, repost_record_uri: String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("unreposting post");
         let parts: Vec<&str> = repost_record_uri.split('/').collect();
         let rkey = parts.last().ok_or("Invalid repost record URI")?;
 
@@ -381,8 +373,6 @@ impl BskyJob {
     }
 
     async fn get_post_thread(&self, strong_ref: &StrongRef) -> Result<RedskyUiMsg,  Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("get post thread");
-
         let response = self.bsky_agent
         .api
         .app
@@ -435,7 +425,6 @@ impl BskyJob {
     }
 
     async fn search_actors(&self, query: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("search actors", &query);
         let response = self.bsky_agent
             .api
             .app
@@ -463,9 +452,6 @@ impl BskyJob {
     }
 
     async fn get_user_posts(&self, username: &String, cursor: &Option<String>)  -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("get user posts");
-        let at_uri = format!("at://{}", username);
-        dbg!(&at_uri);
         let response = self.bsky_agent
         .api
         .app
@@ -490,8 +476,6 @@ impl BskyJob {
     }
 
     async fn get_user_profile(&self, username: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("get user profile", &username);
-
         let profile = self.bsky_agent
         .api
         .app
@@ -514,8 +498,6 @@ impl BskyJob {
     }
 
     async fn get_timeline_posts(&self, cursor: &Option<String>) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("get tl");
-
         let response = self.bsky_agent
         .api
         .app
@@ -538,8 +520,6 @@ impl BskyJob {
     }
 
     async fn get_bookmarks(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("get bookmarks");
-
         let response = self.bsky_agent
             .api
             .app
@@ -558,7 +538,6 @@ impl BskyJob {
     }
 
     async fn login(&self, login: &String, pass: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("loggin in");
         let _ = self.bsky_agent.login(login, pass).await?;
         Ok(RedskyUiMsg::LogInSucceededMsg())
     } 
@@ -692,7 +671,6 @@ impl BskyJob {
     }
 
     async fn post(&self, msg: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        dbg!("post");
         let _ = self.bsky_agent.create_record(atrium_api::app::bsky::feed::post::RecordData {
             created_at: Datetime::now(),
             embed: None,

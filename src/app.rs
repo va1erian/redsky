@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::Hash;
 use std::sync::Arc;
 use atrium_api::types::string::Cid;
 use egui::load::Bytes;
@@ -112,7 +112,6 @@ pub enum RedskyUiMsg {
     RefreshTimelineMsg{posts: Vec<Post>, cursor: Option<String>, append: bool},
     ShowUserPostsMsg{username: String, posts: Vec<Post>, cursor: Option<String>, append: bool},
     DropUserPostsMsg{username: String},
-    PrepareImageView {img_uri: String},
     ShowBigImageView {img_uri: String},
     CloseBigImageView {img_uri: String}, 
     ShowErrorMsg{error: String},
@@ -236,25 +235,9 @@ impl RedskyApp {
         if img_url.is_empty() {
             return;
         }
-        if let None = self.image_cache.get(img_url) {
-            println!("requesting image {}", img_url);
+        if !self.image_cache.contains_key(img_url) {
             self.image_cache.insert(img_url.to_string(), None);
             self.post_message(BskyActorMsg::LoadImage { url: img_url.to_string()});
-        }
-    }
-
-    fn request_post_images(&mut self, posts: &Vec<Post>) {
-        for post in posts {
-            self.request_image(&post.avatar_img );
-
-            if let Some(quoted_post) = &post.quoted_post {
-                self.request_image(&quoted_post.avatar_img);
-            }
-
-            for embed in &post.embeds {
-                self.request_image(&embed.thumbnail_url );
-            }
-
         }
     }
 
@@ -338,7 +321,6 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::GetTimeline { cursor: None });
             }
             RedskyUiMsg::RefreshTimelineMsg { posts, cursor, append } => {
-                self.request_post_images(&posts);
                 let new_items: Vec<FeedItem> = posts.into_iter().map(FeedItem::Full).collect();
                 if append {
                     self.timeline.extend(new_items);
@@ -348,7 +330,6 @@ impl RedskyApp {
                 self.timeline_cursor = cursor;
             }
             RedskyUiMsg::RefreshBookmarksMsg { posts } => {
-                self.request_post_images(&posts);
                 self.bookmarks = posts;
             }
             RedskyUiMsg::PrepareUserView { username } => {
@@ -356,17 +337,11 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::GetUserProfile { username });
             }
 
-            RedskyUiMsg::PrepareImageView { img_uri } => {
-                self.image_cache.insert(img_uri.clone(), None);
-                self.post_message(BskyActorMsg::LoadImage { url: img_uri });
-            }
-
             RedskyUiMsg::ShowUserProfile { profile } => {
                 self.user_infos_cache.insert(profile.handle.clone(), profile.into());
 
             }
             RedskyUiMsg::ShowUserPostsMsg { username, posts, cursor, append }  => {
-                self.request_post_images(&posts);
                 let new_items: Vec<FeedItem> = posts.into_iter().map(FeedItem::Full).collect();
                 if append {
                     if let Some(Some(existing_posts)) = self.user_posts.get_mut(&username) {
@@ -459,9 +434,6 @@ impl RedskyApp {
             }
             RedskyUiMsg::NotifyPostAndRepliesLoaded { post, replies } => {
                 let strong_ref = StrongRef { uri: post.uri.clone(), cid: post.cid.clone()};
-                self.request_post_images(&replies);
-                self.request_post_images(&vec![post.clone()]);
-
                 let mut items: Vec<FeedItem> = vec![FeedItem::Full(post)];
                 items.extend(replies.into_iter().map(FeedItem::Full));
 
@@ -476,12 +448,10 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::GetBookmarks());
             }
             RedskyUiMsg::NotifyImageLoaded { url, data } => {
-                self.image_cache.insert(url.clone(), Some(data));
-                println!("image {} loaded", url);
+                self.image_cache.insert(url, Some(data));
             }
             RedskyUiMsg::ShowBigImageView { img_uri }  => {
-                self.opened_image_views.insert(img_uri.clone());
-                self.post_message(BskyActorMsg::LoadImage { url: img_uri });
+                self.opened_image_views.insert(img_uri);
             }
             RedskyUiMsg::CloseBigImageView { img_uri } => {
                 self.opened_image_views.remove(&img_uri);
@@ -526,38 +496,16 @@ impl RedskyApp {
         }
     }
 
-    fn make_maybe_user_profile_view(&self, ui: &mut Ui, username: &str, maybe_profile: Option<&UserProfile>) {
+    fn make_maybe_user_profile_view(&mut self, ui: &mut Ui, username: &str, maybe_profile: Option<&UserProfile>) {
         match maybe_profile {
             Some(profile) => {
                 ui.horizontal(|ui| {
                     ui.set_max_height(120f32);
-                    match self.image_cache.get(&profile.avatar_uri) {
-                        Some(Some(img)) => {
-                            let mut s = DefaultHasher::new();
-                            profile.avatar_uri.hash(&mut s);
-                            let hash = s.finish();
-                            let image_id = format!("bytes://{}.jpg", hash);
-
-                                ui.vertical(|ui| {
-                                    ui.set_max_width(120f32);
-                                    ui.set_max_height(120f32);
-                                    ui.image(ImageSource::Bytes { 
-                                        uri: Cow::from(image_id), 
-                                        bytes: Bytes::Shared(img.clone())
-                                    });
-                                });
-                        }
-                        Some(None) => {
-                            ui.vertical(|ui| {
-                                ui.set_max_width(120f32);
-                                ui.set_max_height(120f32);
-                                ui.spinner();
-                            });
-                        }
-                        None => {
-                            self.post_message(BskyActorMsg::LoadImage { url: profile.avatar_uri.clone() });
-                        }
-                    }
+                    ui.vertical(|ui| {
+                        ui.set_max_width(120f32);
+                        ui.set_max_height(120f32);
+                        self.make_buffer_image_view(ui, &profile.avatar_uri, Some(&profile.avatar_uri));
+                    });
                     ui.vertical(|ui|{
                         ui.set_max_height(120f32);
                         ui.heading(&profile.display_name);
@@ -582,7 +530,8 @@ impl RedskyApp {
         .size(Size::remainder())
         .vertical(|mut strip| {
             strip.cell(|ui| {
-                self.make_maybe_user_profile_view(ui, username, self.user_infos_cache.get(username));
+                let profile = self.user_infos_cache.get(username).cloned();
+                self.make_maybe_user_profile_view(ui, username, profile.as_ref());
                 ui.separator();
             });
             strip.strip(|builder| {
@@ -610,43 +559,36 @@ impl RedskyApp {
         });
     }
 
-    fn make_buffer_image_view(&self, ui: &mut Ui, image_uri: &String, img_data: &Option<Arc<[u8]>>, full_view_uri: Option<&String>) {
-        let mut s = DefaultHasher::new();
-        image_uri.hash(&mut s);
-        let hash = s.finish();
-        let image_id = format!("bytes://{}.jpg", hash);
-
-        if  let Some(data) = img_data {
-            let img_view = ui.image(ImageSource::Bytes { 
-                uri: Cow::from(image_id), 
-                bytes: Bytes::Shared(data.clone())
-            });
-            let sensing_img = img_view.interact(egui::Sense::click());
-    
-            if sensing_img.clicked() {
-                if let Some(uri) = full_view_uri {
-                    dbg!(uri);
-                    self.post_ui_message(RedskyUiMsg::ShowBigImageView { img_uri: uri.clone() });
+    fn make_buffer_image_view(&mut self, ui: &mut Ui, image_uri: &str, full_view_uri: Option<&String>) {
+        match self.image_cache.get(image_uri) {
+            Some(Some(data)) => {
+                let img_view = ui.image(ImageSource::Bytes {
+                    uri: Cow::Owned(image_uri.to_string()),
+                    bytes: Bytes::Shared(data.clone())
+                });
+                if img_view.interact(egui::Sense::click()).clicked() {
+                    if let Some(uri) = full_view_uri {
+                        self.post_ui_message(RedskyUiMsg::ShowBigImageView { img_uri: uri.clone() });
+                    }
                 }
             }
-        } else {
-            ui.spinner();
+            Some(None) => {
+                ui.spinner();
+            }
+            None => {
+                self.request_image(image_uri);
+                ui.spinner();
+            }
         }
-
-
     }
 
-    fn make_post_inner_view(&self, ui: &mut Ui, post: &Post) {
+    fn make_post_inner_view(&mut self, ui: &mut Ui, post: &Post) {
         ui.horizontal(|ui| {
             ui.set_min_height(57.6f32);
-            if self.image_cache.contains_key(&post.avatar_img) {
-                ui.vertical(|ui| {
-                    ui.set_max_width(57.6f32);
-                    self.make_buffer_image_view(ui, &post.avatar_img,
-                        self.image_cache.get(&post.avatar_img).unwrap(),
-                         Some(&post.avatar_img));
-                });
-            }
+            ui.vertical(|ui| {
+                ui.set_max_width(57.6f32);
+                self.make_buffer_image_view(ui, &post.avatar_img, Some(&post.avatar_img));
+            });
 
             ui.vertical(|ui| {
                 if ui.link(RichText::new(&post.display_name).strong()).clicked() {
@@ -680,7 +622,8 @@ impl RedskyApp {
                                         ui.scroll_to_rect(ui.max_rect(), Some(egui::Align::TOP));
                                         scroll_top_reset = true;
                                     }
-                                    self.make_post_inner_view(ui, post);
+                                    let post = post.clone();
+                                    self.make_post_inner_view(ui, &post);
 
                                     if let Some(quoted_post) = &post.quoted_post {
                                         egui::Frame::new()
@@ -697,14 +640,11 @@ impl RedskyApp {
                                         ui.horizontal_wrapped(|ui| {
                                             ui.set_min_height(200f32);
                                             for embed in &post.embeds {
-                                                if self.image_cache.contains_key(&embed.thumbnail_url) {
-                                                    self.make_buffer_image_view(
-                                                        ui,
-                                                        &embed.thumbnail_url,
-                                                        self.image_cache.get(&embed.thumbnail_url).unwrap(),
-                                                        Some(&embed.url),
-                                                    );
-                                                }
+                                                self.make_buffer_image_view(
+                                                    ui,
+                                                    &embed.thumbnail_url,
+                                                    Some(&embed.url),
+                                                );
                                             }
                                         });
                                     }
@@ -916,6 +856,7 @@ impl RedskyApp {
         let keys: Vec<StrongRef> = self.post_replies_cache.keys().cloned().collect();
         for repost_ref in keys {
             let mut posts_opt = self.post_replies_cache.get_mut(&repost_ref).unwrap().take();
+            let mut should_close = false;
 
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(repost_ref.uri.clone()),
@@ -933,17 +874,22 @@ impl RedskyApp {
                             }
                         }
                     });
-
                     if ctx.input(|i| i.viewport().close_requested()) {
-                        self.post_ui_message(RedskyUiMsg::CloseThreadView { thread_ref: repost_ref.clone() });
+                        should_close = true;
                     }
                 });
+            if should_close {
+                self.post_ui_message(RedskyUiMsg::CloseThreadView { thread_ref: repost_ref.clone() });
+            }
             self.post_replies_cache.insert(repost_ref, posts_opt);
         }
     }
 
-    fn make_user_list_viewports(&self, ctx: &egui::Context) {
-        for (post_ref, likers) in &self.post_likers_cache {
+    fn make_user_list_viewports(&mut self, ctx: &egui::Context) {
+        let liker_keys: Vec<StrongRef> = self.post_likers_cache.keys().cloned().collect();
+        for post_ref in liker_keys {
+            let likers = self.post_likers_cache.remove(&post_ref).unwrap();
+            let mut should_close = false;
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("likers_{}", post_ref.uri)),
                 egui::ViewportBuilder::default()
@@ -952,19 +898,27 @@ impl RedskyApp {
                 |ctx, _| {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         egui::ScrollArea::vertical().show(ui, |ui| {
-                            for user in likers {
+                            for user in &likers {
                                 self.make_maybe_user_profile_view(ui, &user.handle, Some(user));
                                 ui.separator();
                             }
                         });
                     });
                     if ctx.input(|i| i.viewport().close_requested()) {
-                        self.post_ui_message(RedskyUiMsg::CloseLikesView { post_uri: post_ref.clone() });
+                        should_close = true;
                     }
                 }
             );
+            if should_close {
+                 self.post_ui_message(RedskyUiMsg::CloseLikesView { post_uri: post_ref.clone() });
+            } else {
+                self.post_likers_cache.insert(post_ref, likers);
+            }
         }
-        for (post_ref, reposters) in &self.post_reposters_cache {
+        let reposter_keys: Vec<StrongRef> = self.post_reposters_cache.keys().cloned().collect();
+        for post_ref in reposter_keys {
+            let reposters = self.post_reposters_cache.remove(&post_ref).unwrap();
+            let mut should_close = false;
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("reposters_{}", post_ref.uri)),
                 egui::ViewportBuilder::default()
@@ -973,17 +927,22 @@ impl RedskyApp {
                 |ctx, _| {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         egui::ScrollArea::vertical().show(ui, |ui| {
-                            for user in reposters {
+                            for user in &reposters {
                                 self.make_maybe_user_profile_view(ui, &user.handle, Some(user));
                                 ui.separator();
                             }
                         });
                     });
                     if ctx.input(|i| i.viewport().close_requested()) {
-                        self.post_ui_message(RedskyUiMsg::CloseRepostersView { post_uri: post_ref.clone() });
+                        should_close = true;
                     }
                 }
             );
+            if should_close {
+                 self.post_ui_message(RedskyUiMsg::CloseRepostersView { post_uri: post_ref.clone() });
+            } else {
+                self.post_reposters_cache.insert(post_ref, reposters);
+            }
         }
     }
 
@@ -1080,10 +1039,12 @@ impl RedskyApp {
         }
     }
 
-    fn make_image_viewports(&self, ctx: &egui::Context) {
-        for img in &self.opened_image_views  {
+    fn make_image_viewports(&mut self, ctx: &egui::Context) {
+        let opened_images: Vec<String> = self.opened_image_views.iter().cloned().collect();
+        for img in opened_images {
+            let mut should_close = false;
             ctx.show_viewport_immediate(
-                egui::ViewportId::from_hash_of(img),
+                egui::ViewportId::from_hash_of(&img),
                 egui::ViewportBuilder::default()
                     .with_title(format!("Viewing {}", img))
                     .with_inner_size([800.0, 600.0]),
@@ -1091,19 +1052,17 @@ impl RedskyApp {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         egui::ScrollArea::both().show(ui, |ui| {
                             ui.centered_and_justified(|ui| {
-                                if self.image_cache.contains_key(img) {
-                                    self.make_buffer_image_view(ui, img, self.image_cache.get(img).unwrap(), None);
-                                } else {
-                                    self.post_ui_message(RedskyUiMsg::PrepareImageView { img_uri: img.clone() });
-                                }
+                                self.make_buffer_image_view(ui, &img, None);
                             });
                         });
                     });
-
                     if ctx.input(|i| i.viewport().close_requested()) {
-                        self.post_ui_message(RedskyUiMsg::CloseBigImageView { img_uri: img.clone() });
+                        should_close = true;
                     }
                 });
+            if should_close {
+                self.post_ui_message(RedskyUiMsg::CloseBigImageView { img_uri: img });
+            }
         }
     }
 
@@ -1137,6 +1096,7 @@ impl RedskyApp {
     }
 
     fn make_search_window(&mut self, ctx: &egui::Context) {
+        let results = std::mem::take(&mut self.search_results);
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("__search_actors"),
             egui::ViewportBuilder::default()
@@ -1153,7 +1113,7 @@ impl RedskyApp {
 
                         let mut clicked_profile = None;
                         egui::ScrollArea::vertical().show(ui, |ui| {
-                            for profile in &self.search_results {
+                            for profile in &results {
                                 let (rect, response) = ui.allocate_at_least(vec2(ui.available_width(), 57.6), Sense::click());
                                 if response.hovered() {
                                     ui.painter().rect_filled(rect, 4.0, egui::Color32::from_gray(64));
@@ -1167,7 +1127,7 @@ impl RedskyApp {
                                     ui.add_space(4.0);
                                     ui.vertical(|ui| {
                                         ui.set_max_width(57.6f32);
-                                        self.make_buffer_image_view(ui, &profile.avatar_uri, self.image_cache.get(&profile.avatar_uri).unwrap_or(&None), None);
+                                        self.make_buffer_image_view(ui, &profile.avatar_uri, None);
                                     });
                                     ui.vertical(|ui| {
                                         ui.label(RichText::new(&profile.display_name).strong());
@@ -1188,6 +1148,7 @@ impl RedskyApp {
                     self.is_search_window_open = false;
                 }
             });
+        self.search_results = results;
     }
 }
 
