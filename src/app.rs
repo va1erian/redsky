@@ -41,6 +41,8 @@ pub struct Post {
     pub embeds: Vec<PostImage>,
     pub quoted_post: Option<Box<Post>>,
     pub is_reply: bool,
+    pub viewer_like: Option<String>,
+    pub viewer_repost: Option<String>,
 }
 
 pub enum FeedItem {
@@ -90,7 +92,7 @@ pub enum DownloadStatus {
 
 pub enum RedskyUiMsg {
     LogInSucceededMsg(),
-    PostSucceeed(),
+    ActionSucceeded(),
     RefreshBookmarksMsg{posts: Vec<Post>},
     PrepareUserView{username: String},
     PrepareThreadView{thread_ref: StrongRef},
@@ -98,6 +100,13 @@ pub enum RedskyUiMsg {
     NotifyImageLoaded{url: String, data: Arc<[u8]>},
     #[allow(dead_code)]
     NotifyLikesLoaded {post_uri: StrongRef, likers: Vec<UserProfile> },
+    NotifyRepostersLoaded {post_uri: StrongRef, reposters: Vec<UserProfile> },
+    CloseLikesView { post_uri: StrongRef },
+    CloseRepostersView { post_uri: StrongRef },
+    PrepareLikeAction { post_uri: String, post_cid: Cid, unlike: bool },
+    PrepareRepostAction { post_uri: String, post_cid: Cid, unrepost: bool },
+    NotifyLikeActionSucceeded { post_uri: String, like_uri: String },
+    NotifyRepostActionSucceeded { post_uri: String, repost_uri: String },
     NotifyPostAndRepliesLoaded {post: Post, replies : Vec<Post>},
     ShowUserProfile{profile: UserProfile},
     RefreshTimelineMsg{posts: Vec<Post>, cursor: Option<String>, append: bool},
@@ -119,7 +128,12 @@ pub enum BskyActorMsg {
     Post {msg_body: String},
     GetTimeline { cursor: Option<String> },
     GetBookmarks(),
-    //GetPostLikers {post_ref: StrongRef},
+    Like {post_ref: StrongRef},
+    Unlike {post_uri: String, like_record_uri: String},
+    Repost {post_ref: StrongRef},
+    Unrepost {post_uri: String, repost_record_uri: String},
+    GetPostLikers {post_ref: StrongRef},
+    GetPostRepostedBy {post_ref: StrongRef},
     GetPostAndReplies {post_ref: StrongRef},
     GetUserProfile{username: String},
     GetUserPosts {username: String, cursor: Option<String>},
@@ -162,6 +176,7 @@ pub struct RedskyApp {
     user_infos_cache: HashMap<String, UserProfile>,
     image_cache: HashMap<String, Option<Arc<[u8]>>>,
     post_likers_cache: HashMap<StrongRef, Vec<UserProfile>>,
+    post_reposters_cache: HashMap<StrongRef, Vec<UserProfile>>,
     post_replies_cache: HashMap<StrongRef, Option<Vec<FeedItem>>>,
     opened_image_views: HashSet<String>,
     download_tasks: HashMap<u64, DownloadTask>,
@@ -196,6 +211,7 @@ impl RedskyApp {
             user_infos_cache: HashMap::new(),
             image_cache: HashMap::new(),
             post_likers_cache: HashMap::new(),
+            post_reposters_cache: HashMap::new(),
             post_replies_cache: HashMap::new(),
             opened_image_views: HashSet::new(),
             download_tasks: HashMap::new(),
@@ -242,10 +258,83 @@ impl RedskyApp {
         }
     }
 
+    fn update_post_optimistically<F>(&mut self, post_uri: &str, mut update_fn: F)
+    where F: FnMut(&mut Post) {
+        // Update timeline
+        for item in &mut self.timeline {
+            if let FeedItem::Full(post) = item {
+                if post.uri == post_uri {
+                    update_fn(post);
+                }
+                if let Some(quoted) = &mut post.quoted_post {
+                    if quoted.uri == post_uri {
+                        update_fn(quoted);
+                    }
+                }
+            }
+        }
+        // Update user posts
+        for posts in self.user_posts.values_mut() {
+            if let Some(posts) = posts {
+                for item in posts {
+                    if let FeedItem::Full(post) = item {
+                        if post.uri == post_uri {
+                            update_fn(post);
+                        }
+                        if let Some(quoted) = &mut post.quoted_post {
+                            if quoted.uri == post_uri {
+                                update_fn(quoted);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Update replies cache
+        for posts in self.post_replies_cache.values_mut() {
+            if let Some(posts) = posts {
+                for item in posts {
+                    if let FeedItem::Full(post) = item {
+                        if post.uri == post_uri {
+                            update_fn(post);
+                        }
+                        if let Some(quoted) = &mut post.quoted_post {
+                            if quoted.uri == post_uri {
+                                update_fn(quoted);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Update bookmarks
+        for post in &mut self.bookmarks {
+            if post.uri == post_uri {
+                update_fn(post);
+            }
+            if let Some(quoted) = &mut post.quoted_post {
+                if quoted.uri == post_uri {
+                    update_fn(quoted);
+                }
+            }
+        }
+        // Update post cache
+        if let Some(post) = self.post_cache.get_mut(post_uri) {
+            update_fn(post);
+        }
+        for post in self.post_cache.values_mut() {
+            if let Some(quoted) = &mut post.quoted_post {
+                if quoted.uri == post_uri {
+                    update_fn(quoted);
+                }
+            }
+        }
+    }
+
     fn process_message(&mut self, msg: RedskyUiMsg) -> () {
         
         match msg {
-            RedskyUiMsg::PostSucceeed () => {
+            RedskyUiMsg::ActionSucceeded () => {
                 self.post_message(BskyActorMsg::GetTimeline { cursor: None });
             }
             RedskyUiMsg::RefreshTimelineMsg { posts, cursor, append } => {
@@ -306,6 +395,67 @@ impl RedskyApp {
             }
             RedskyUiMsg::NotifyLikesLoaded { post_uri, likers } => {
                 self.post_likers_cache.insert(post_uri, likers);
+            }
+            RedskyUiMsg::NotifyRepostersLoaded { post_uri, reposters } => {
+                self.post_reposters_cache.insert(post_uri, reposters);
+            }
+            RedskyUiMsg::CloseLikesView { post_uri } => {
+                self.post_likers_cache.remove(&post_uri);
+            }
+            RedskyUiMsg::CloseRepostersView { post_uri } => {
+                self.post_reposters_cache.remove(&post_uri);
+            }
+            RedskyUiMsg::PrepareLikeAction { post_uri, post_cid, unlike } => {
+                if unlike {
+                    let mut like_record_uri = String::new();
+                    self.update_post_optimistically(&post_uri, |post| {
+                        if let Some(uri) = &post.viewer_like {
+                            like_record_uri = uri.clone();
+                        }
+                        post.viewer_like = None;
+                        post.like_count = (post.like_count - 1).max(0);
+                    });
+                    if !like_record_uri.is_empty() {
+                        self.post_message(BskyActorMsg::Unlike { post_uri, like_record_uri });
+                    }
+                } else {
+                    self.update_post_optimistically(&post_uri, |post| {
+                        post.viewer_like = Some("pending".to_string());
+                        post.like_count += 1;
+                    });
+                    self.post_message(BskyActorMsg::Like { post_ref: StrongRef { uri: post_uri, cid: post_cid } });
+                }
+            }
+            RedskyUiMsg::PrepareRepostAction { post_uri, post_cid, unrepost } => {
+                if unrepost {
+                    let mut repost_record_uri = String::new();
+                    self.update_post_optimistically(&post_uri, |post| {
+                        if let Some(uri) = &post.viewer_repost {
+                            repost_record_uri = uri.clone();
+                        }
+                        post.viewer_repost = None;
+                        post.repost_count = (post.repost_count - 1).max(0);
+                    });
+                    if !repost_record_uri.is_empty() {
+                        self.post_message(BskyActorMsg::Unrepost { post_uri, repost_record_uri });
+                    }
+                } else {
+                    self.update_post_optimistically(&post_uri, |post| {
+                        post.viewer_repost = Some("pending".to_string());
+                        post.repost_count += 1;
+                    });
+                    self.post_message(BskyActorMsg::Repost { post_ref: StrongRef { uri: post_uri, cid: post_cid } });
+                }
+            }
+            RedskyUiMsg::NotifyLikeActionSucceeded { post_uri, like_uri } => {
+                self.update_post_optimistically(&post_uri, |post| {
+                    post.viewer_like = Some(like_uri.clone());
+                });
+            }
+            RedskyUiMsg::NotifyRepostActionSucceeded { post_uri, repost_uri } => {
+                self.update_post_optimistically(&post_uri, |post| {
+                    post.viewer_repost = Some(repost_uri.clone());
+                });
             }
             RedskyUiMsg::NotifyPostAndRepliesLoaded { post, replies } => {
                 let strong_ref = StrongRef { uri: post.uri.clone(), cid: post.cid.clone()};
@@ -559,8 +709,60 @@ impl RedskyApp {
                                         });
                                     }
                                     ui.horizontal(|ui| {
-                                        let _ = ui.button(format!("{} x ❤", &post.like_count));
-                                        let _ = ui.button(format!("{} x 🔃", &post.repost_count));
+                                        let like_text = if post.viewer_like.is_some() {
+                                            RichText::new(format!("{} x ❤", &post.like_count)).color(egui::Color32::RED)
+                                        } else {
+                                            RichText::new(format!("{} x ❤", &post.like_count))
+                                        };
+                                        let like_btn = ui.button(like_text);
+                                        if like_btn.clicked() {
+                                            let post_uri = post.uri.clone();
+                                            let post_cid = post.cid.clone();
+                                            self.post_ui_message(RedskyUiMsg::PrepareLikeAction {
+                                                post_uri,
+                                                post_cid,
+                                                unlike: post.viewer_like.is_some()
+                                            });
+                                        }
+                                        like_btn.context_menu(|ui| {
+                                            if ui.button("Show Likers").clicked() {
+                                                self.post_message(BskyActorMsg::GetPostLikers {
+                                                    post_ref: StrongRef {
+                                                        uri: post.uri.clone(),
+                                                        cid: post.cid.clone()
+                                                    }
+                                                });
+                                                ui.close_menu();
+                                            }
+                                        });
+
+                                        let repost_text = if post.viewer_repost.is_some() {
+                                            RichText::new(format!("{} x 🔃", &post.repost_count)).color(egui::Color32::GREEN)
+                                        } else {
+                                            RichText::new(format!("{} x 🔃", &post.repost_count))
+                                        };
+                                        let repost_btn = ui.button(repost_text);
+                                        if repost_btn.clicked() {
+                                            let post_uri = post.uri.clone();
+                                            let post_cid = post.cid.clone();
+                                            self.post_ui_message(RedskyUiMsg::PrepareRepostAction {
+                                                post_uri,
+                                                post_cid,
+                                                unrepost: post.viewer_repost.is_some()
+                                            });
+                                        }
+                                        repost_btn.context_menu(|ui| {
+                                            if ui.button("Show Reposters").clicked() {
+                                                self.post_message(BskyActorMsg::GetPostRepostedBy {
+                                                    post_ref: StrongRef {
+                                                        uri: post.uri.clone(),
+                                                        cid: post.cid.clone()
+                                                    }
+                                                });
+                                                ui.close_menu();
+                                            }
+                                        });
+
                                         let _ = ui.button("…");
                                     });
                                     ui.separator();
@@ -737,6 +939,51 @@ impl RedskyApp {
                     }
                 });
             self.post_replies_cache.insert(repost_ref, posts_opt);
+        }
+    }
+
+    fn make_user_list_viewports(&self, ctx: &egui::Context) {
+        for (post_ref, likers) in &self.post_likers_cache {
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of(format!("likers_{}", post_ref.uri)),
+                egui::ViewportBuilder::default()
+                    .with_title(format!("Likers of post"))
+                    .with_inner_size([300.0, 400.0]),
+                |ctx, _| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            for user in likers {
+                                self.make_maybe_user_profile_view(ui, &user.handle, Some(user));
+                                ui.separator();
+                            }
+                        });
+                    });
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        self.post_ui_message(RedskyUiMsg::CloseLikesView { post_uri: post_ref.clone() });
+                    }
+                }
+            );
+        }
+        for (post_ref, reposters) in &self.post_reposters_cache {
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of(format!("reposters_{}", post_ref.uri)),
+                egui::ViewportBuilder::default()
+                    .with_title(format!("Reposters of post"))
+                    .with_inner_size([300.0, 400.0]),
+                |ctx, _| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            for user in reposters {
+                                self.make_maybe_user_profile_view(ui, &user.handle, Some(user));
+                                ui.separator();
+                            }
+                        });
+                    });
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        self.post_ui_message(RedskyUiMsg::CloseRepostersView { post_uri: post_ref.clone() });
+                    }
+                }
+            );
         }
     }
 
@@ -957,6 +1204,7 @@ impl eframe::App for RedskyApp {
         self.make_download_progress_view(ctx);
         self.make_image_viewports(ctx);
         self.make_open_thread_views(ctx);
+        self.make_user_list_viewports(ctx);
         
         if self.is_post_window_open {
             self.make_new_post_view(ctx);
