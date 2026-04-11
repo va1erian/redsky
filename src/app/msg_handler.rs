@@ -173,6 +173,17 @@ impl RedskyApp {
             }
             RedskyUiMsg::LogInSucceededMsg() => {
                 self.is_logged_in = true;
+
+                if self.remember_me {
+                    if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+                        let _ = entry.set_password(&format!("{}:{}", self.login, self.pass));
+                    }
+                } else {
+                    if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+                        let _ = entry.delete_credential();
+                    }
+                }
+
                 self.main_view_state = MainViewState::OwnPostFeed;
                 self.post_message(BskyActorMsg::GetUserPosts {
                     username: self.login.clone(),
