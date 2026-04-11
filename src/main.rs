@@ -11,11 +11,32 @@ use tokio;
 use tokio::runtime::Runtime;
 
 
+fn load_icon() -> egui::IconData {
+    let (icon_rgba, icon_width, icon_height) = {
+        let image = image::load_from_memory(include_bytes!("../resources/redsky.png"))
+            .expect("Failed to open icon path")
+            .into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        (rgba, width, height)
+    };
+    
+    egui::IconData {
+        rgba: icon_rgba,
+        width: icon_width,
+        height: icon_height,
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut options = eframe::NativeOptions::default();
+    options.viewport = egui::ViewportBuilder::default()
+        .with_icon(std::sync::Arc::new(load_icon()));
+
     // Run the GUI in the main thread.
     let _ = eframe::run_native(
         "Redsky",
-        eframe::NativeOptions::default(),
+        options,
         Box::new(|_cc| {
             let (msg_tx , msg_rx) = std::sync::mpsc::channel();
             let (result_tx, result_rx) = std::sync::mpsc::channel();
