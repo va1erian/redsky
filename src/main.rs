@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-mod bsky_actor;
 mod app;
+mod bsky_actor;
 
 use crate::app::RedskyApp;
 
@@ -9,7 +9,6 @@ use bsky_actor::BskyActor;
 use bsky_sdk::BskyAgent;
 use tokio;
 use tokio::runtime::Runtime;
-
 
 fn load_icon() -> egui::IconData {
     let (icon_rgba, icon_width, icon_height) = {
@@ -20,7 +19,7 @@ fn load_icon() -> egui::IconData {
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    
+
     egui::IconData {
         rgba: icon_rgba,
         width: icon_width,
@@ -30,18 +29,17 @@ fn load_icon() -> egui::IconData {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut options = eframe::NativeOptions::default();
-    options.viewport = egui::ViewportBuilder::default()
-        .with_icon(std::sync::Arc::new(load_icon()));
+    options.viewport = egui::ViewportBuilder::default().with_icon(std::sync::Arc::new(load_icon()));
 
     // Run the GUI in the main thread.
     let _ = eframe::run_native(
         "Redsky",
         options,
         Box::new(|_cc| {
-            let (msg_tx , msg_rx) = std::sync::mpsc::channel();
+            let (msg_tx, msg_rx) = std::sync::mpsc::channel();
             let (result_tx, result_rx) = std::sync::mpsc::channel();
-        
-            let app = RedskyApp::new(msg_tx,result_tx.clone(), result_rx);
+
+            let app = RedskyApp::new(msg_tx, result_tx.clone(), result_rx);
             let actor_ctx = _cc.egui_ctx.clone();
 
             //spawn actor thread with tokio enabled
@@ -50,10 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _enter = rt.enter();
                 let agent = match rt.block_on(BskyAgent::builder().build()) {
                     Err(e) => panic!("{}", e),
-                    Ok(agent) => agent
+                    Ok(agent) => agent,
                 };
 
-                let mut actor = BskyActor::new(agent,actor_ctx, msg_rx, result_tx);
+                let mut actor = BskyActor::new(agent, actor_ctx, msg_rx, result_tx);
 
                 loop {
                     if !actor.pump() {
@@ -68,6 +66,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     Ok(())
 }
-    
-
-
