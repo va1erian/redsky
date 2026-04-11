@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Build and Release
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libegl1-mesa-dev libgles2-mesa-dev
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: Build
+      run: cargo build --release
+
+    - name: Zip executable (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cd target/release
+        zip redsky-${{ runner.os }}.zip redsky
+
+    - name: Zip executable (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cd target/release
+        Compress-Archive -Path redsky.exe -DestinationPath redsky-${{ runner.os }}.zip
+
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v2
+      with:
+        files: target/release/redsky-${{ runner.os }}.zip
