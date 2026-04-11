@@ -621,11 +621,11 @@ impl RedskyApp {
     fn make_post_inner_view(&self, ui: &mut Ui, post: &Post) {
         ui.horizontal(|ui| {
             ui.set_min_height(57.6f32);
-            if self.image_cache.contains_key(&post.avatar_img) {
+            if let Some(img_data) = self.image_cache.get(&post.avatar_img) {
                 ui.vertical(|ui| {
                     ui.set_max_width(57.6f32);
                     self.make_buffer_image_view(ui, &post.avatar_img,
-                        self.image_cache.get(&post.avatar_img).unwrap(),
+                        img_data,
                          Some(&post.avatar_img));
                 });
             }
@@ -679,11 +679,11 @@ impl RedskyApp {
                                         ui.horizontal_wrapped(|ui| {
                                             ui.set_min_height(200f32);
                                             for embed in &post.embeds {
-                                                if self.image_cache.contains_key(&embed.thumbnail_url) {
+                                                if let Some(img_data) = self.image_cache.get(&embed.thumbnail_url) {
                                                     self.make_buffer_image_view(
                                                         ui,
                                                         &embed.thumbnail_url,
-                                                        self.image_cache.get(&embed.thumbnail_url).unwrap(),
+                                                        img_data,
                                                         Some(&embed.url),
                                                     );
                                                 }
@@ -847,7 +847,10 @@ impl RedskyApp {
                 continue;
             }
 
-            let mut posts = self.user_posts.get_mut(&username).unwrap().take();
+            let mut posts = match self.user_posts.get_mut(&username) {
+                Some(p) => p.take(),
+                None => continue,
+            };
 
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(&username),
@@ -877,7 +880,7 @@ impl RedskyApp {
         }
 
         for username in to_drop {
-            self.ui_tx.send(RedskyUiMsg::DropUserPostsMsg { username }).unwrap();
+            let _ = self.ui_tx.send(RedskyUiMsg::DropUserPostsMsg { username });
         }
 
         for username in to_download {
@@ -897,7 +900,10 @@ impl RedskyApp {
     fn make_open_thread_views(&mut self, ctx: &egui::Context) {
         let keys: Vec<StrongRef> = self.post_replies_cache.keys().cloned().collect();
         for repost_ref in keys {
-            let mut posts_opt = self.post_replies_cache.get_mut(&repost_ref).unwrap().take();
+            let mut posts_opt = match self.post_replies_cache.get_mut(&repost_ref) {
+                Some(p) => p.take(),
+                None => continue,
+            };
 
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(repost_ref.uri.clone()),
@@ -1073,8 +1079,8 @@ impl RedskyApp {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         egui::ScrollArea::both().show(ui, |ui| {
                             ui.centered_and_justified(|ui| {
-                                if self.image_cache.contains_key(img) {
-                                    self.make_buffer_image_view(ui, img, self.image_cache.get(img).unwrap(), None);
+                                if let Some(img_data) = self.image_cache.get(img) {
+                                    self.make_buffer_image_view(ui, img, img_data, None);
                                 } else {
                                     self.post_ui_message(RedskyUiMsg::PrepareImageView { img_uri: img.clone() });
                                 }
