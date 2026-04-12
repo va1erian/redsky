@@ -343,12 +343,9 @@ impl eframe::App for RedskyApp {
                                     // Bookmarks also needs to use FeedItem if I want to use make_post_view
                                     // or I should convert them.
                                     // In this patch I'll convert them for simplicity as a first step.
-                                    let mut bookmark_items: Vec<FeedItem> = self
-                                        .bookmarks
-                                        .iter()
-                                        .cloned()
-                                        .map(FeedItem::Full)
-                                        .collect();
+                                    let mut bookmark_items = crate::app::into_feed_items(
+                                        self.bookmarks.iter().cloned()
+                                    );
                                     self.make_post_view(ui, "Your bookmarks", &mut bookmark_items);
                                     // Note: changes to bookmark_items (like dehydration) won't persist back to self.bookmarks
                                     // this way. Ideally bookmarks should also be Vec<FeedItem>.
