@@ -1,5 +1,5 @@
 impl RedskyApp {
-    fn process_message(&mut self, ctx: &egui::Context, msg: RedskyUiMsg) -> () {
+    fn process_message(&mut self, ctx: &egui::Context, msg: RedskyUiMsg) {
         match msg {
             RedskyUiMsg::ActionSucceeded() => {
                 self.post_message(BskyActorMsg::GetTimeline { cursor: None });
@@ -37,7 +37,7 @@ impl RedskyApp {
             }
             RedskyUiMsg::ShowUserProfile { profile } => {
                 self.user_infos_cache
-                    .insert(profile.handle.clone(), profile.into());
+                    .insert(profile.handle.clone(), profile);
             }
             RedskyUiMsg::ShowUserPostsMsg {
                 username,
