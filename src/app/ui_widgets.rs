@@ -6,7 +6,7 @@ impl RedskyApp {
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("likers_{}", post_ref.uri)),
                 egui::ViewportBuilder::default()
-                    .with_title(format!("Likers of post"))
+                    .with_title("Likers of post".to_string())
                     .with_inner_size([300.0, 400.0]),
                 |ui, _| {
                     egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -29,7 +29,7 @@ impl RedskyApp {
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("reposters_{}", post_ref.uri)),
                 egui::ViewportBuilder::default()
-                    .with_title(format!("Reposters of post"))
+                    .with_title("Reposters of post".to_string())
                     .with_inner_size([300.0, 400.0]),
                 |ui, _| {
                     egui::CentralPanel::default().show_inside(ui, |ui| {
