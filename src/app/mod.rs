@@ -38,6 +38,7 @@ pub struct RedskyApp {
     search_results: Vec<UserProfile>,
     unread_notifications: i64,
     notifications: Vec<AppNotification>,
+    remember_me: bool,
 }
 impl RedskyApp {
     pub fn new(
@@ -45,6 +46,24 @@ impl RedskyApp {
         ui_tx: Sender<RedskyUiMsg>,
         rx: Receiver<RedskyUiMsg>,
     ) -> Self {
+        let mut login = String::new();
+        let mut pass = String::new();
+        let mut remember_me = false;
+
+        if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+            if let Ok(cred) = entry.get_password() {
+                if let Some((l, p)) = cred.split_once(':') {
+                    login = l.to_string();
+                    pass = p.to_string();
+                    remember_me = true;
+                    let _ = tx.send(BskyActorMsg::Login {
+                        login: login.clone(),
+                        pass: pass.clone(),
+                    });
+                }
+            }
+        }
+
         Self {
             tx,
             ui_tx,
@@ -52,8 +71,9 @@ impl RedskyApp {
             is_logged_in: false,
             is_post_window_open: false,
             main_view_state: MainViewState::Login,
-            login: String::new(),
-            pass: String::new(),
+            login,
+            pass,
+            remember_me,
             msg: String::new(),
             timeline: Vec::new(),
             bookmarks: Vec::new(),
@@ -280,6 +300,7 @@ impl eframe::App for RedskyApp {
                                     )
                                     .labelled_by(pwd_label.id);
                                 });
+                                ui.checkbox(&mut self.remember_me, "Remember me");
                                 ui.horizontal(|ui| {
                                     if ui.button("login").clicked() {
                                         self.post_message(BskyActorMsg::Login {
