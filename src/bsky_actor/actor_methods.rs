@@ -241,7 +241,7 @@ impl BskyJob {
             let replies = match &post_data.replies {
                 Some(reply_list) => reply_list
                     .iter()
-                    .flat_map(|reply| match reply {
+                    .map(|reply| match reply {
                         Union::Refs(maybe_reply) => {
                             if let ThreadViewPostRepliesItem::ThreadViewPost(view) = maybe_reply {
                                 extract_post(&view.post).into_iter().collect()
@@ -253,6 +253,7 @@ impl BskyJob {
                             vec![]
                         }
                     })
+                    .flatten()
                     .collect(),
                 None => {
                     vec![]
@@ -484,7 +485,7 @@ impl BskyJob {
                 .data
                 .bookmarks
                 .iter()
-                .flat_map(extract_post_from_bookmark)
+                .flat_map(|post_view| extract_post_from_bookmark(post_view))
                 .collect(),
         })
     }
@@ -598,7 +599,7 @@ impl BskyJob {
                     let resp = reqwest::get(&url).await?;
                     let bytes = resp.bytes().await?;
 
-                    let raw_filename = url.split('/').next_back().unwrap_or("image");
+                    let raw_filename = url.split('/').last().unwrap_or("image");
                     let extension = if raw_filename.contains("@png") {
                         "png"
                     } else if raw_filename.contains("@jpeg") || raw_filename.contains("@jpg") {
@@ -694,7 +695,7 @@ impl BskyJob {
             )
             .await?;
 
-        let count = response.data.count;
+        let count = response.data.count as i64;
         Ok(RedskyUiMsg::NotifyUnreadCount { count })
     }
 

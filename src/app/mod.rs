@@ -39,6 +39,8 @@ pub struct RedskyApp {
     unread_notifications: i64,
     notifications: Vec<AppNotification>,
     remember_me: bool,
+    pub settings: AppSettings,
+    pub is_settings_window_open: bool,
 }
 impl RedskyApp {
     pub fn new(
@@ -96,21 +98,23 @@ impl RedskyApp {
             search_results: Vec::new(),
             unread_notifications: 0,
             notifications: Vec::new(),
+            settings: AppSettings::load(),
+            is_settings_window_open: false,
         }
     }
 }
 impl RedskyApp {
-    fn post_message(&self, msg: BskyActorMsg) {
+    fn post_message(&self, msg: BskyActorMsg) -> () {
         let _ = self.tx.send(msg);
     }
-    fn post_ui_message(&self, msg: RedskyUiMsg) {
+    fn post_ui_message(&self, msg: RedskyUiMsg) -> () {
         let _ = self.ui_tx.send(msg);
     }
     fn request_image(&mut self, img_url: &str) {
         if img_url.is_empty() {
             return;
         }
-        if self.image_cache.get(img_url).is_none() {
+        if let None = self.image_cache.get(img_url) {
             println!("requesting image {}", img_url);
             self.image_cache.insert(img_url.to_string(), None);
             self.post_message(BskyActorMsg::LoadImage {
@@ -147,30 +151,34 @@ impl RedskyApp {
             }
         }
         // Update user posts
-        for posts in self.user_posts.values_mut().flatten() {
-            for item in posts {
-                if let FeedItem::Full(post) = item {
-                    if post.uri == post_uri {
-                        update_fn(post);
-                    }
-                    if let Some(quoted) = &mut post.quoted_post {
-                        if quoted.uri == post_uri {
-                            update_fn(quoted);
+        for posts in self.user_posts.values_mut() {
+            if let Some(posts) = posts {
+                for item in posts {
+                    if let FeedItem::Full(post) = item {
+                        if post.uri == post_uri {
+                            update_fn(post);
+                        }
+                        if let Some(quoted) = &mut post.quoted_post {
+                            if quoted.uri == post_uri {
+                                update_fn(quoted);
+                            }
                         }
                     }
                 }
             }
         }
         // Update replies cache
-        for posts in self.post_replies_cache.values_mut().flatten() {
-            for item in posts {
-                if let FeedItem::Full(post) = item {
-                    if post.uri == post_uri {
-                        update_fn(post);
-                    }
-                    if let Some(quoted) = &mut post.quoted_post {
-                        if quoted.uri == post_uri {
-                            update_fn(quoted);
+        for posts in self.post_replies_cache.values_mut() {
+            if let Some(posts) = posts {
+                for item in posts {
+                    if let FeedItem::Full(post) = item {
+                        if post.uri == post_uri {
+                            update_fn(post);
+                        }
+                        if let Some(quoted) = &mut post.quoted_post {
+                            if quoted.uri == post_uri {
+                                update_fn(quoted);
+                            }
                         }
                     }
                 }
@@ -203,6 +211,7 @@ impl RedskyApp {
 impl eframe::App for RedskyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx();
+        ctx.set_pixels_per_point(self.settings.zoom_factor);
         while let Ok(msg) = self.rx.try_recv() {
             self.process_message(ctx, msg);
         }
@@ -216,6 +225,9 @@ impl eframe::App for RedskyApp {
         }
         if self.is_search_window_open {
             self.make_search_window(ctx);
+        }
+        if self.is_settings_window_open {
+            self.make_settings_window(ctx);
         }
         if self.main_view_state != MainViewState::Login {
             let mut top_clicked = false;
@@ -240,6 +252,9 @@ impl eframe::App for RedskyApp {
                         }
                         if ui.button("Search accounts...").clicked() {
                             self.is_search_window_open = true;
+                        }
+                        if ui.button("Settings...").clicked() {
+                            self.is_settings_window_open = true;
                         }
                         if ui.button("Quit").clicked() {
                             std::process::exit(0);
@@ -413,3 +428,4 @@ include!("ui_user.rs");
 include!("ui_thread.rs");
 include!("ui_widgets.rs");
 include!("msg_handler.rs");
+include!("ui_settings.rs");

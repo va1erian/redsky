@@ -18,7 +18,12 @@ impl RedskyApp {
         full_view_uri: Option<&String>,
     ) {
         if let Some(texture) = img_data {
-            let img_view = ui.add(egui::Image::new(texture).max_width(ui.available_width()));
+            let max_width = if full_view_uri.is_some() {
+                self.settings.max_image_size.min(ui.available_width())
+            } else {
+                ui.available_width()
+            };
+            let img_view = ui.add(egui::Image::new(texture).max_width(max_width));
             let sensing_img = img_view.interact(egui::Sense::click());
 
             if sensing_img.clicked() {
@@ -100,7 +105,7 @@ impl RedskyApp {
                                             .corner_radius(8)
                                             .stroke(egui::Stroke::new(1.0, egui::Color32::GRAY))
                                             .show(ui, |ui| {
-                                                self.make_post_inner_view(ui, quoted_post);
+                                                self.make_post_inner_view(ui, &quoted_post);
                                             });
                                     }
 

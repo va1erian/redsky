@@ -1,4 +1,5 @@
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct StrongRef {
     pub uri: String,
     pub cid: Cid,
@@ -258,4 +259,56 @@ enum MainViewState {
     OwnPostFeed,
     BookmarksFeed,
     NotificationsFeed,
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum AppTheme {
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct AppSettings {
+    pub theme: AppTheme,
+    pub max_image_size: f32,
+    pub zoom_factor: f32,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            theme: AppTheme::System,
+            max_image_size: 640.0,
+            zoom_factor: 1.0,
+        }
+    }
+}
+
+
+
+impl AppSettings {
+    pub fn load() -> Self {
+        if let Some(proj_dirs) = directories::ProjectDirs::from("com", "Redsky", "Redsky") {
+            let config_dir = proj_dirs.config_dir();
+            let config_path = config_dir.join("settings.toml");
+            if let Ok(contents) = std::fs::read_to_string(&config_path) {
+                if let Ok(settings) = toml::from_str(&contents) {
+                    return settings;
+                }
+            }
+        }
+        Self::default()
+    }
+
+    pub fn save(&self) {
+        if let Some(proj_dirs) = directories::ProjectDirs::from("com", "Redsky", "Redsky") {
+            let config_dir = proj_dirs.config_dir();
+            if std::fs::create_dir_all(config_dir).is_ok() {
+                let config_path = config_dir.join("settings.toml");
+                if let Ok(contents) = toml::to_string(self) {
+                    let _ = std::fs::write(config_path, contents);
+                }
+            }
+        }
+    }
 }
