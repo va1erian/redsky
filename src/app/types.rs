@@ -154,6 +154,12 @@ pub enum RedskyUiMsg {
         cursor: Option<String>,
         append: bool,
     },
+    ShowUserLikesMsg {
+        username: String,
+        posts: Vec<Post>,
+        cursor: Option<String>,
+        append: bool,
+    },
     DropUserPostsMsg {
         username: String,
     },
@@ -239,6 +245,10 @@ pub enum BskyActorMsg {
         username: String,
         cursor: Option<String>,
     },
+    GetUserLikes {
+        username: String,
+        cursor: Option<String>,
+    },
     SearchActors {
         query: String,
     },
@@ -270,6 +280,7 @@ enum MainViewState {
 pub enum UserViewState {
     Posts,
     Media,
+    Liked,
 }
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AppTheme {

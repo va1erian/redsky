@@ -60,6 +60,7 @@ impl RedskyApp {
         ui: &mut Ui,
         username: &str,
         posts: &mut Option<Vec<FeedItem>>,
+        liked_posts: &mut Option<Vec<FeedItem>>,
     ) {
         StripBuilder::new(ui)
             .size(Size::exact(150.0))
@@ -76,6 +77,7 @@ impl RedskyApp {
                     ui.horizontal(|ui| {
                         ui.selectable_value(&mut current_view, UserViewState::Posts, "Posts");
                         ui.selectable_value(&mut current_view, UserViewState::Media, "Media");
+                        ui.selectable_value(&mut current_view, UserViewState::Liked, "Liked");
                     });
                     self.user_view_states.insert(username.to_string(), current_view.clone());
 
@@ -83,20 +85,39 @@ impl RedskyApp {
                 });
                 strip.strip(|builder| {
                     builder.sizes(Size::remainder(), 1).horizontal(|mut strip| {
-                        strip.cell(|ui| match posts {
-                            Some(posts) => {
-                                let current_view = self.user_view_states.get(username).unwrap();
-                                match current_view {
-                                    UserViewState::Posts => {
-                                        self.make_post_view(ui, username, posts);
-                                    }
-                                    UserViewState::Media => {
-                                        self.make_user_media_view(ui, username, posts);
+                        strip.cell(|ui| {
+                            let current_view = self.user_view_states.get(username).unwrap().clone();
+                            match current_view {
+                                UserViewState::Posts => {
+                                    if let Some(posts_vec) = posts {
+                                        self.make_post_view(ui, username, posts_vec);
+                                    } else {
+                                        self.make_placeholder_post_view(ui, username);
                                     }
                                 }
-                            }
-                            None => {
-                                self.make_placeholder_post_view(ui, username);
+                                UserViewState::Media => {
+                                    if let Some(posts_vec) = posts {
+                                        self.make_user_media_view(ui, username, posts_vec);
+                                    } else {
+                                        self.make_placeholder_post_view(ui, username);
+                                    }
+                                }
+                                UserViewState::Liked => {
+                                    if let Some(likes_vec) = liked_posts {
+                                        self.make_post_view(ui, username, likes_vec);
+                                    } else {
+                                        // Request the liked posts for the user if they are not loaded
+                                        // Use a Some(vec![]) or similar? We can just insert it into self.user_likes_posts
+                                        // but we only have `liked_posts` as a mutable ref to the take()n value.
+                                        // By setting it to Some(vec![]), we avoid infinite requests. It will be replaced later by the actor.
+                                        *liked_posts = Some(vec![]);
+                                        self.post_message(BskyActorMsg::GetUserLikes {
+                                            username: username.to_string(),
+                                            cursor: None,
+                                        });
+                                        self.make_placeholder_post_view(ui, username);
+                                    }
+                                }
                             }
                         });
                     });
@@ -177,12 +198,26 @@ impl RedskyApp {
                     self.timeline_cursor = None; // Avoid duplicate requests
                 }
             } else if username != "Thread" {
-                if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
-                    self.post_message(BskyActorMsg::GetUserPosts {
-                        username: username.to_string(),
-                        cursor: Some(cursor),
-                    });
-                    self.user_cursors.insert(username.to_string(), None); // Avoid duplicate requests
+                let current_view = self.user_view_states.get(username).cloned().unwrap_or(UserViewState::Posts);
+                match current_view {
+                    UserViewState::Posts | UserViewState::Media => {
+                        if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
+                            self.post_message(BskyActorMsg::GetUserPosts {
+                                username: username.to_string(),
+                                cursor: Some(cursor),
+                            });
+                            self.user_cursors.insert(username.to_string(), None); // Avoid duplicate requests
+                        }
+                    }
+                    UserViewState::Liked => {
+                        if let Some(cursor) = self.user_likes_cursors.get(username).cloned().flatten() {
+                            self.post_message(BskyActorMsg::GetUserLikes {
+                                username: username.to_string(),
+                                cursor: Some(cursor),
+                            });
+                            self.user_likes_cursors.insert(username.to_string(), None); // Avoid duplicate requests
+                        }
+                    }
                 }
             }
         }
@@ -200,6 +235,7 @@ impl RedskyApp {
             }
 
             let mut posts = self.user_posts.get_mut(&username).unwrap().take();
+            let mut liked_posts = self.user_likes_posts.get_mut(&username).and_then(|p| p.take());
 
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(&username),
@@ -218,7 +254,7 @@ impl RedskyApp {
                         });
                     });
                     egui::CentralPanel::default().show_inside(ui, |ui| {
-                        self.make_maybe_user_post_view(ui, &username, &mut posts);
+                        self.make_maybe_user_post_view(ui, &username, &mut posts, &mut liked_posts);
                     });
 
                     if ui.ctx().input(|i| i.viewport().close_requested()) {
@@ -226,7 +262,8 @@ impl RedskyApp {
                     }
                 },
             );
-            self.user_posts.insert(username, posts);
+            self.user_posts.insert(username.clone(), posts);
+            self.user_likes_posts.insert(username, liked_posts);
         }
 
         for username in to_drop {
