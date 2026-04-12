@@ -10,7 +10,7 @@ impl RedskyApp {
                 append,
             } => {
                 self.request_post_images(&posts);
-                let new_items: Vec<FeedItem> = posts.into_iter().map(FeedItem::Full).collect();
+                let new_items = crate::app::into_feed_items(posts);
                 if append {
                     self.timeline.extend(new_items);
                 } else {
@@ -41,7 +41,7 @@ impl RedskyApp {
                 append,
             } => {
                 self.request_post_images(&posts);
-                let new_items: Vec<FeedItem> = posts.into_iter().map(FeedItem::Full).collect();
+                let new_items = crate::app::into_feed_items(posts);
                 if append {
                     if let Some(Some(existing_posts)) = self.user_posts.get_mut(&username) {
                         existing_posts.extend(new_items);
@@ -167,7 +167,7 @@ impl RedskyApp {
                 };
                 self.request_post_images(&replies);
                 self.request_post_images(&vec![post.clone()]);
-                let mut items: Vec<FeedItem> = vec![FeedItem::Full(post)];
+                let mut items = vec![FeedItem::Full(post)];
                 items.extend(replies.into_iter().map(FeedItem::Full));
                 self.post_replies_cache.insert(strong_ref, Some(items));
             }

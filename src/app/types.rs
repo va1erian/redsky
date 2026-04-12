@@ -35,6 +35,11 @@ pub enum FeedItem {
     Full(Post),
     Dehydrated { uri: String },
 }
+
+pub fn into_feed_items(posts: impl IntoIterator<Item = Post>) -> Vec<FeedItem> {
+    posts.into_iter().map(FeedItem::Full).collect()
+}
+
 #[derive(Debug)]
 pub struct DownloadTask {
     #[allow(dead_code)]
