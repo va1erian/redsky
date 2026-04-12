@@ -105,7 +105,7 @@ impl RedskyApp {
                                             .corner_radius(8)
                                             .stroke(egui::Stroke::new(1.0, egui::Color32::GRAY))
                                             .show(ui, |ui| {
-                                                self.make_post_inner_view(ui, quoted_post);
+                                                self.make_post_inner_view(ui, &quoted_post);
                                             });
                                     }
 

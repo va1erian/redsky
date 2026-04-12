@@ -18,6 +18,7 @@ use atrium_api::types::Object;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
 use bsky_sdk::BskyAgent;
+use reqwest;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
@@ -176,7 +177,7 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
         like_count: post_view.like_count.unwrap_or(0),
         repost_count: post_view.repost_count.unwrap_or(0),
         embeds: images,
-        quoted_post: quoted_post.map(Box::new),
+        quoted_post: quoted_post.map(|post| Box::new(post)),
         is_reply: post_record_data.reply.is_some(),
         viewer_like: post_view.viewer.as_ref().and_then(|v| v.like.clone()),
         viewer_repost: post_view.viewer.as_ref().and_then(|v| v.repost.clone()),
