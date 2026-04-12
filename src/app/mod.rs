@@ -41,6 +41,7 @@ pub struct RedskyApp {
     remember_me: bool,
     pub settings: AppSettings,
     pub is_settings_window_open: bool,
+    new_post_images: Vec<String>,
 }
 impl RedskyApp {
     pub fn new(
@@ -100,6 +101,7 @@ impl RedskyApp {
             notifications: Vec::new(),
             settings: AppSettings::load(),
             is_settings_window_open: false,
+            new_post_images: Vec::new(),
         }
     }
 }

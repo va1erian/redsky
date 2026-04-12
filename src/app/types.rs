@@ -203,6 +203,7 @@ pub enum BskyActorMsg {
     },
     Post {
         msg_body: String,
+        image_paths: Vec<String>,
     },
     GetTimeline {
         cursor: Option<String>,
