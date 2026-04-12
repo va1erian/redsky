@@ -658,13 +658,34 @@ impl BskyJob {
     async fn post(
         &self,
         msg: &String,
+        image_paths: &Vec<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("post");
+
+        let mut embed = None;
+        if !image_paths.is_empty() {
+            let mut images = Vec::new();
+            for path in image_paths {
+                if let Ok(file_bytes) = std::fs::read(path) {
+                    let blob_output = self.bsky_agent.api.com.atproto.repo.upload_blob(file_bytes).await?;
+                    images.push(atrium_api::app::bsky::embed::images::ImageData {
+                        alt: String::new(),
+                        aspect_ratio: None,
+                        image: blob_output.blob.clone(),
+                    }.into());
+                }
+            }
+            if !images.is_empty() {
+                let main_embed = atrium_api::app::bsky::embed::images::MainData { images }.into();
+                embed = Some(atrium_api::types::Union::Refs(atrium_api::app::bsky::feed::post::RecordEmbedRefs::AppBskyEmbedImagesMain(Box::new(main_embed))));
+            }
+        }
+
         let _ = self
             .bsky_agent
             .create_record(atrium_api::app::bsky::feed::post::RecordData {
                 created_at: Datetime::now(),
-                embed: None,
+                embed,
                 entities: None,
                 facets: None,
                 labels: None,

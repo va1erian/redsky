@@ -196,7 +196,7 @@ impl BskyJob {
     pub async fn perform(self) -> () {
         let result = match &self.job {
             BskyActorMsg::Login { login, pass } => self.login(login, pass).await,
-            BskyActorMsg::Post { msg_body } => self.post(msg_body).await,
+            BskyActorMsg::Post { msg_body, image_paths } => self.post(msg_body, image_paths).await,
             BskyActorMsg::GetPostAndReplies { post_ref } => self.get_post_thread(post_ref).await,
             BskyActorMsg::GetPostLikers { post_ref } => self.get_post_likers(post_ref).await,
             BskyActorMsg::GetPostRepostedBy { post_ref } => {

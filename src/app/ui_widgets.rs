@@ -205,12 +205,34 @@ impl RedskyApp {
                         ui.heading("New post");
 
                         ui.text_edit_multiline(&mut self.msg);
+
+                        if !self.new_post_images.is_empty() {
+                            ui.label(format!("{} image(s) selected", self.new_post_images.len()));
+                        }
+
                         ui.horizontal(|ui| {
+                            if ui.button("Add Image").clicked() {
+                                if self.new_post_images.len() >= 4 {
+                                    self.post_ui_message(RedskyUiMsg::ShowErrorMsg {
+                                        error: "Maximum 4 images allowed".to_string(),
+                                    });
+                                } else if let Some(path) = rfd::FileDialog::new()
+                                    .add_filter("Image", &["png", "jpg", "jpeg", "webp"])
+                                    .pick_file()
+                                {
+                                    if let Some(path_str) = path.to_str() {
+                                        self.new_post_images.push(path_str.to_string());
+                                    }
+                                }
+                            }
+
                             if ui.button("send").clicked() {
                                 self.post_message(BskyActorMsg::Post {
                                     msg_body: self.msg.clone(),
+                                    image_paths: self.new_post_images.clone(),
                                 });
                                 self.msg.clear();
+                                self.new_post_images.clear();
                             }
                         });
                     });
