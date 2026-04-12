@@ -271,7 +271,7 @@ pub enum AppTheme {
 pub struct AppSettings {
     pub theme: AppTheme,
     pub max_image_size: f32,
-    pub persist_windows: bool,
+    pub zoom_factor: f32,
 }
 
 impl Default for AppSettings {
@@ -279,46 +279,12 @@ impl Default for AppSettings {
         Self {
             theme: AppTheme::System,
             max_image_size: 640.0,
-            persist_windows: false,
+            zoom_factor: 1.0,
         }
     }
 }
 
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct AppWindowState {
-    pub persisted_user_profiles: Vec<String>,
-    pub persisted_threads: Vec<StrongRef>,
-    pub persisted_images: Vec<String>,
-    pub is_post_window_open: bool,
-    pub is_search_window_open: bool,
-}
 
-impl AppWindowState {
-    pub fn load() -> Self {
-        if let Some(proj_dirs) = directories::ProjectDirs::from("com", "Redsky", "Redsky") {
-            let config_dir = proj_dirs.config_dir();
-            let config_path = config_dir.join("window_state.toml");
-            if let Ok(contents) = std::fs::read_to_string(&config_path) {
-                if let Ok(settings) = toml::from_str(&contents) {
-                    return settings;
-                }
-            }
-        }
-        Self::default()
-    }
-
-    pub fn save(&self) {
-        if let Some(proj_dirs) = directories::ProjectDirs::from("com", "Redsky", "Redsky") {
-            let config_dir = proj_dirs.config_dir();
-            if std::fs::create_dir_all(config_dir).is_ok() {
-                let config_path = config_dir.join("window_state.toml");
-                if let Ok(contents) = toml::to_string(self) {
-                    let _ = std::fs::write(config_path, contents);
-                }
-            }
-        }
-    }
-}
 
 impl AppSettings {
     pub fn load() -> Self {

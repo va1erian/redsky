@@ -41,7 +41,6 @@ pub struct RedskyApp {
     remember_me: bool,
     pub settings: AppSettings,
     pub is_settings_window_open: bool,
-    pub window_state: AppWindowState,
 }
 impl RedskyApp {
     pub fn new(
@@ -101,7 +100,6 @@ impl RedskyApp {
             notifications: Vec::new(),
             settings: AppSettings::load(),
             is_settings_window_open: false,
-            window_state: AppWindowState::load(),
         }
     }
 }
@@ -211,14 +209,9 @@ impl RedskyApp {
     }
 }
 impl eframe::App for RedskyApp {
-    fn on_exit(&mut self) {
-        if self.settings.persist_windows {
-            self.window_state.save();
-        }
-    }
-
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx();
+        ctx.set_pixels_per_point(self.settings.zoom_factor);
         while let Ok(msg) = self.rx.try_recv() {
             self.process_message(ctx, msg);
         }
@@ -256,11 +249,9 @@ impl eframe::App for RedskyApp {
                     ui.menu_button("File", |ui| {
                         if ui.button("New post...").clicked() {
                             self.is_post_window_open = true;
-                            self.window_state.is_post_window_open = true;
                         }
                         if ui.button("Search accounts...").clicked() {
                             self.is_search_window_open = true;
-                            self.window_state.is_search_window_open = true;
                         }
                         if ui.button("Settings...").clicked() {
                             self.is_settings_window_open = true;

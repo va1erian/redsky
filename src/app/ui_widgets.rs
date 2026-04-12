@@ -218,7 +218,6 @@ impl RedskyApp {
 
                 if ui.ctx().input(|i| i.viewport().close_requested()) {
                     self.is_post_window_open = false;
-                    self.window_state.is_post_window_open = false;
                 }
             },
         );
@@ -295,14 +294,12 @@ impl RedskyApp {
                                 cursor: None,
                             });
                             self.is_search_window_open = false;
-                            self.window_state.is_search_window_open = false;
                         }
                     });
                 });
 
                 if ui.ctx().input(|i| i.viewport().close_requested()) {
                     self.is_search_window_open = false;
-                    self.window_state.is_search_window_open = false;
                 }
             },
         );

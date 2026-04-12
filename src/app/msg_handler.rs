@@ -24,12 +24,7 @@ impl RedskyApp {
             }
             RedskyUiMsg::PrepareUserView { username } => {
                 self.user_posts.insert(username.clone(), None);
-                self.post_message(BskyActorMsg::GetUserProfile { username: username.clone() });
-                if self.settings.persist_windows {
-                    if !self.window_state.persisted_user_profiles.contains(&username) {
-                        self.window_state.persisted_user_profiles.push(username);
-                    }
-                }
+                self.post_message(BskyActorMsg::GetUserProfile { username });
             }
             RedskyUiMsg::PrepareImageView { img_uri } => {
                 self.image_cache.insert(img_uri.clone(), None);
@@ -59,25 +54,14 @@ impl RedskyApp {
             RedskyUiMsg::PrepareThreadView { thread_ref } => {
                 self.post_replies_cache.insert(thread_ref.clone(), None);
                 self.post_message(BskyActorMsg::GetPostAndReplies {
-                    post_ref: thread_ref.clone(),
+                    post_ref: thread_ref,
                 });
-                if self.settings.persist_windows {
-                    if !self.window_state.persisted_threads.contains(&thread_ref) {
-                        self.window_state.persisted_threads.push(thread_ref);
-                    }
-                }
             }
             RedskyUiMsg::CloseThreadView { thread_ref } => {
                 self.post_replies_cache.remove(&thread_ref);
-                if self.settings.persist_windows {
-                    self.window_state.persisted_threads.retain(|t| t != &thread_ref);
-                }
             }
             RedskyUiMsg::DropUserPostsMsg { username } => {
                 self.user_posts.remove(&username);
-                if self.settings.persist_windows {
-                    self.window_state.persisted_user_profiles.retain(|u| u != &username);
-                }
             }
             RedskyUiMsg::ShowErrorMsg { error } => {
                 print!("error: {}", error);
@@ -212,34 +196,6 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::GetBookmarks());
                 self.post_message(BskyActorMsg::GetUnreadCount());
                 self.post_message(BskyActorMsg::GetNotifications());
-
-                if self.settings.persist_windows {
-                    for handle in &self.window_state.persisted_user_profiles {
-                        self.post_ui_message(RedskyUiMsg::PrepareUserView {
-                            username: handle.clone(),
-                        });
-                        self.post_message(BskyActorMsg::GetUserPosts {
-                            username: handle.clone(),
-                            cursor: None,
-                        });
-                    }
-                    for thread_ref in &self.window_state.persisted_threads {
-                        self.post_ui_message(RedskyUiMsg::PrepareThreadView {
-                            thread_ref: thread_ref.clone(),
-                        });
-                    }
-                    for img_uri in &self.window_state.persisted_images {
-                        self.post_ui_message(RedskyUiMsg::ShowBigImageView {
-                            img_uri: img_uri.clone(),
-                        });
-                    }
-                    if self.window_state.is_post_window_open {
-                        self.is_post_window_open = true;
-                    }
-                    if self.window_state.is_search_window_open {
-                        self.is_search_window_open = true;
-                    }
-                }
             }
             RedskyUiMsg::NotifyUnreadCount { count } => {
                 self.unread_notifications = count;
@@ -257,18 +213,10 @@ impl RedskyApp {
             }
             RedskyUiMsg::ShowBigImageView { img_uri } => {
                 self.opened_image_views.insert(img_uri.clone());
-                self.post_message(BskyActorMsg::LoadImage { url: img_uri.clone() });
-                if self.settings.persist_windows {
-                    if !self.window_state.persisted_images.contains(&img_uri) {
-                        self.window_state.persisted_images.push(img_uri);
-                    }
-                }
+                self.post_message(BskyActorMsg::LoadImage { url: img_uri });
             }
             RedskyUiMsg::CloseBigImageView { img_uri } => {
                 self.opened_image_views.remove(&img_uri);
-                if self.settings.persist_windows {
-                    self.window_state.persisted_images.retain(|i| i != &img_uri);
-                }
             }
             RedskyUiMsg::DownloadProgress {
                 id,

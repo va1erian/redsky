@@ -37,9 +37,12 @@ impl RedskyApp {
                             }
                         });
 
-                        if ui.checkbox(&mut self.settings.persist_windows, "Persist open windows on close").changed() {
-                            settings_changed = true;
-                        }
+                        ui.horizontal(|ui| {
+                            ui.label("Global UI Zoom Factor:");
+                            if ui.add(egui::Slider::new(&mut self.settings.zoom_factor, 0.5..=3.0).text("x")).changed() {
+                                settings_changed = true;
+                            }
+                        });
 
                         if settings_changed {
                             self.settings.save();
