@@ -1,5 +1,18 @@
 impl RedskyApp {
 
+    fn make_post_context_menu_item<F>(&self, ui: &mut egui::Ui, text: &str, post: &Post, msg_constructor: F)
+    where
+        F: FnOnce(StrongRef) -> BskyActorMsg,
+    {
+        if ui.button(text).clicked() {
+            self.post_message(msg_constructor(StrongRef {
+                uri: post.uri.clone(),
+                cid: post.cid.clone(),
+            }));
+            ui.close();
+        }
+    }
+
     fn make_placeholder_post_view(&mut self, ui: &mut Ui, username: &str) {
         ui.vertical(|ui| {
             ui.heading(username);
@@ -147,15 +160,12 @@ impl RedskyApp {
                                             });
                                         }
                                         like_btn.context_menu(|ui| {
-                                            if ui.button("Show Likers").clicked() {
-                                                self.post_message(BskyActorMsg::GetPostLikers {
-                                                    post_ref: StrongRef {
-                                                        uri: post.uri.clone(),
-                                                        cid: post.cid.clone(),
-                                                    },
-                                                });
-                                                ui.close();
-                                            }
+                                            self.make_post_context_menu_item(
+                                                ui,
+                                                "Show Likers",
+                                                post,
+                                                |post_ref| BskyActorMsg::GetPostLikers { post_ref },
+                                            );
                                         });
 
                                         let repost_text = if post.viewer_repost.is_some() {
@@ -177,17 +187,14 @@ impl RedskyApp {
                                             );
                                         }
                                         repost_btn.context_menu(|ui| {
-                                            if ui.button("Show Reposters").clicked() {
-                                                self.post_message(
-                                                    BskyActorMsg::GetPostRepostedBy {
-                                                        post_ref: StrongRef {
-                                                            uri: post.uri.clone(),
-                                                            cid: post.cid.clone(),
-                                                        },
-                                                    },
-                                                );
-                                                ui.close();
-                                            }
+                                            self.make_post_context_menu_item(
+                                                ui,
+                                                "Show Reposters",
+                                                post,
+                                                |post_ref| BskyActorMsg::GetPostRepostedBy {
+                                                    post_ref,
+                                                },
+                                            );
                                         });
 
                                         let _ = ui.button("…");
