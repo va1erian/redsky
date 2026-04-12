@@ -583,10 +583,17 @@ impl BskyJob {
         // 3. Download images
         let mut downloaded_count = 0;
         let mut errors = Vec::new();
-        let target_dir = std::path::Path::new(path);
+        let target_dir = std::path::Path::new(path).to_path_buf();
+
+        let mut set = tokio::task::JoinSet::new();
+        let concurrency_limit = 5;
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(concurrency_limit));
 
         for (url, date) in images_to_download {
-            {
+            let semaphore = std::sync::Arc::clone(&semaphore);
+            let target_dir = target_dir.clone();
+            set.spawn(async move {
+                let _permit = semaphore.acquire().await.unwrap();
                 let result = async {
                     let resp = reqwest::get(&url).await?;
                     let bytes = resp.bytes().await?;
@@ -605,10 +612,10 @@ impl BskyJob {
                     };
 
                     let base_name = raw_filename.split('@').next().unwrap_or(raw_filename);
-                    let truncated_base = if base_name.len() > 20 {
-                        &base_name[..20]
+                    let truncated_base: String = if base_name.chars().count() > 20 {
+                        base_name.chars().take(20).collect()
                     } else {
-                        base_name
+                        base_name.to_string()
                     };
 
                     // date is like 2024-05-18T10:00:00.000Z, sanitized for filename
@@ -621,10 +628,14 @@ impl BskyJob {
                     Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
                 }
                 .await;
+                (url, result)
+            });
+        }
 
-                if let Err(e) = result {
-                    errors.push(format!("Failed to download {}: {}", url, e));
-                }
+        while let Some(res) = set.join_next().await {
+            let (url, result) = res.unwrap(); // JoinError
+            if let Err(e) = result {
+                errors.push(format!("Failed to download {}: {}", url, e));
             }
 
             downloaded_count += 1;
@@ -636,9 +647,6 @@ impl BskyJob {
                 total_images: Some(total_images),
                 status: DownloadStatus::Downloading,
             });
-
-            // Rate limiting awareness
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
 
         self.post_to_ui(RedskyUiMsg::DownloadFinished { id, errors });
