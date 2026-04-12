@@ -249,3 +249,23 @@ impl BskyJob {
     }
 }
 include!("actor_methods.rs");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::channel;
+
+    #[tokio::test]
+    async fn test_pump_channel_closed() {
+        let (msg_tx, msg_rx) = channel();
+        let (ui_tx, _ui_rx) = channel();
+        let agent = BskyAgent::builder().build().await.unwrap();
+        let mut actor = BskyActor::new(agent, egui::Context::default(), msg_rx, ui_tx);
+
+        // Drop the sender to close the channel
+        drop(msg_tx);
+
+        // pump() should return false when the channel is closed
+        assert!(!actor.pump());
+    }
+}
