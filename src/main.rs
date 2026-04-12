@@ -2,6 +2,7 @@
 
 mod app;
 mod bsky_actor;
+mod updater;
 
 use crate::app::RedskyApp;
 
@@ -40,6 +41,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let (result_tx, result_rx) = std::sync::mpsc::channel();
 
             let app = RedskyApp::new(msg_tx, result_tx.clone(), result_rx);
+
+            #[cfg(target_os = "windows")]
+            {
+                std::thread::spawn(|| {
+                    let rt = Runtime::new().expect("Unable to create tokio runtime for updater");
+                    rt.block_on(async {
+                        updater::check_and_update().await;
+                    });
+                });
+            }
             let actor_ctx = _cc.egui_ctx.clone();
 
             match app.settings.theme {
