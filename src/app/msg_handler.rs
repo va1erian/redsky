@@ -51,6 +51,23 @@ impl RedskyApp {
                 }
                 self.user_cursors.insert(username, cursor);
             }
+            RedskyUiMsg::ShowUserLikesMsg {
+                username,
+                posts,
+                cursor,
+                append,
+            } => {
+                self.request_post_images(&posts);
+                let new_items = crate::app::into_feed_items(posts);
+                if append {
+                    if let Some(Some(existing_posts)) = self.user_likes_posts.get_mut(&username) {
+                        existing_posts.extend(new_items);
+                    }
+                } else {
+                    self.user_likes_posts.insert(username.clone(), Some(new_items));
+                }
+                self.user_likes_cursors.insert(username, cursor);
+            }
             RedskyUiMsg::PrepareThreadView { thread_ref } => {
                 self.post_replies_cache.insert(thread_ref.clone(), None);
                 self.post_message(BskyActorMsg::GetPostAndReplies {
@@ -62,6 +79,7 @@ impl RedskyApp {
             }
             RedskyUiMsg::DropUserPostsMsg { username } => {
                 self.user_posts.remove(&username);
+                self.user_likes_posts.remove(&username);
             }
             RedskyUiMsg::ShowErrorMsg { error } => {
                 print!("error: {}", error);

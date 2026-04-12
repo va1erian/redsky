@@ -338,6 +338,49 @@ impl BskyJob {
         Ok(RedskyUiMsg::ShowSearchResults { results })
     }
 
+    async fn get_user_likes(
+        &self,
+        username: &String,
+        cursor: &Option<String>,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("get user likes");
+        let response = self
+            .bsky_agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_actor_likes(
+                atrium_api::app::bsky::feed::get_actor_likes::ParametersData {
+                    actor: AtIdentifier::Handle(
+                        username
+                            .parse()
+                            .map_err(|e| format!("Invalid handle: {}", e))?,
+                    ),
+                    cursor: cursor.clone(),
+                    limit: 30.try_into().ok(),
+                }
+                .into(),
+            )
+            .await?;
+
+        Ok(RedskyUiMsg::ShowUserLikesMsg {
+            username: username.to_string(),
+            posts: response
+                .data
+                .feed
+                .iter()
+                .filter_map(
+                    |post_el: &atrium_api::types::Object<
+                        atrium_api::app::bsky::feed::defs::FeedViewPostData,
+                    >| { extract_post(&post_el.post) },
+                )
+                .collect(),
+            cursor: response.data.cursor,
+            append: cursor.is_some(),
+        })
+    }
+
     async fn get_user_posts(
         &self,
         username: &String,

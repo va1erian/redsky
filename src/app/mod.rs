@@ -20,10 +20,12 @@ pub struct RedskyApp {
     timeline: Vec<FeedItem>,
     bookmarks: Vec<Post>,
     user_posts: HashMap<String, Option<Vec<FeedItem>>>,
+    user_likes_posts: HashMap<String, Option<Vec<FeedItem>>>,
     user_view_states: HashMap<String, UserViewState>,
     media_image_sizes: HashMap<String, f32>,
     timeline_cursor: Option<String>,
     user_cursors: HashMap<String, Option<String>>,
+    user_likes_cursors: HashMap<String, Option<String>>,
     post_cache: HashMap<String, Post>,
     post_cache_order: VecDeque<String>,
     scroll_to_top: bool,
@@ -83,10 +85,12 @@ impl RedskyApp {
             timeline: Vec::new(),
             bookmarks: Vec::new(),
             user_posts: HashMap::new(),
+            user_likes_posts: HashMap::new(),
             user_view_states: HashMap::new(),
             media_image_sizes: HashMap::new(),
             timeline_cursor: None,
             user_cursors: HashMap::new(),
+            user_likes_cursors: HashMap::new(),
             post_cache: HashMap::new(),
             post_cache_order: VecDeque::new(),
             scroll_to_top: false,
@@ -158,6 +162,23 @@ impl RedskyApp {
         }
         // Update user posts
         for posts in self.user_posts.values_mut() {
+            if let Some(posts) = posts {
+                for item in posts {
+                    if let FeedItem::Full(post) = item {
+                        if post.uri == post_uri {
+                            update_fn(post);
+                        }
+                        if let Some(quoted) = &mut post.quoted_post {
+                            if quoted.uri == post_uri {
+                                update_fn(quoted);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Update user likes posts
+        for posts in self.user_likes_posts.values_mut() {
             if let Some(posts) = posts {
                 for item in posts {
                     if let FeedItem::Full(post) = item {
@@ -418,8 +439,10 @@ impl eframe::App for RedskyApp {
                     MainViewState::OwnPostFeed => {
                         let login = self.login.clone();
                         let mut maybe_post = self.user_posts.get_mut(&login).and_then(|p| p.take());
-                        self.make_maybe_user_post_view(ui, &login, &mut maybe_post);
-                        self.user_posts.insert(login, maybe_post);
+                        let mut maybe_likes = self.user_likes_posts.get_mut(&login).and_then(|p| p.take());
+                        self.make_maybe_user_post_view(ui, &login, &mut maybe_post, &mut maybe_likes);
+                        self.user_posts.insert(login.clone(), maybe_post);
+                        self.user_likes_posts.insert(login, maybe_likes);
                     }
                 }
             })
