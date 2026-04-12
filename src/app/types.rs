@@ -266,6 +266,11 @@ enum MainViewState {
     BookmarksFeed,
     NotificationsFeed,
 }
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum UserViewState {
+    Posts,
+    Media,
+}
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AppTheme {
     System,
