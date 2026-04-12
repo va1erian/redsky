@@ -244,7 +244,7 @@ impl BskyJob {
                     .map(|reply| match reply {
                         Union::Refs(maybe_reply) => {
                             if let ThreadViewPostRepliesItem::ThreadViewPost(view) = maybe_reply {
-                                vec![extract_post(&view.post)]
+                                extract_post(&view.post).into_iter().collect()
                             } else {
                                 vec![]
                             }
@@ -260,10 +260,11 @@ impl BskyJob {
                 }
             };
 
-            Ok(RedskyUiMsg::NotifyPostAndRepliesLoaded {
-                post: extract_post(&post_data.post),
-                replies,
-            })
+            if let Some(post) = extract_post(&post_data.post) {
+                Ok(RedskyUiMsg::NotifyPostAndRepliesLoaded { post, replies })
+            } else {
+                Err("Failed to parse main post record".into())
+            }
         } else {
             Ok(RedskyUiMsg::ActionSucceeded())
         }
@@ -373,7 +374,7 @@ impl BskyJob {
                 .data
                 .feed
                 .iter()
-                .map(
+                .filter_map(
                     |post_el: &atrium_api::types::Object<
                         atrium_api::app::bsky::feed::defs::FeedViewPostData,
                     >| { extract_post(&post_el.post) },
@@ -454,7 +455,7 @@ impl BskyJob {
                 .data
                 .feed
                 .iter()
-                .map(|feed_element| extract_post(&feed_element.post))
+                .filter_map(|feed_element| extract_post(&feed_element.post))
                 .collect(),
             cursor: response.data.cursor,
             append: cursor.is_some(),
@@ -536,7 +537,7 @@ impl BskyJob {
                 .data
                 .feed
                 .iter()
-                .map(|post_el| extract_post(&post_el.post))
+                .filter_map(|post_el| extract_post(&post_el.post))
                 .collect();
 
             all_posts.extend(posts_in_batch);

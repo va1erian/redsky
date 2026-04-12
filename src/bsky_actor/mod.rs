@@ -107,7 +107,7 @@ fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
     {
         if let Union::Refs(ViewRecordRefs::ViewRecord(view_record)) = &embedded_record.record {
             let quote_post_data =
-                post::RecordData::try_from_unknown(view_record.value.clone()).unwrap();
+                post::RecordData::try_from_unknown(view_record.value.clone()).ok()?;
             Some(Post {
                 uri: view_record.uri.clone(),
                 cid: view_record.cid.clone(),
@@ -161,12 +161,12 @@ fn extract_images(post_view: &Object<PostViewData>) -> Vec<PostImage> {
         .flatten()
         .collect()
 }
-fn extract_post(post_view: &Object<PostViewData>) -> Post {
+fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
     let post_record_data =
-        post::RecordData::try_from_unknown(post_view.data.record.clone()).unwrap();
+        post::RecordData::try_from_unknown(post_view.data.record.clone()).ok()?;
     let images: Vec<PostImage> = extract_images(post_view);
     let quoted_post: Option<Post> = extract_quote_reply(post_view);
-    Post {
+    Some(Post {
         uri: post_view.uri.clone(),
         cid: post_view.cid.clone(),
         content: post_record_data.text.clone(),
@@ -181,12 +181,12 @@ fn extract_post(post_view: &Object<PostViewData>) -> Post {
         is_reply: post_record_data.reply.is_some(),
         viewer_like: post_view.viewer.as_ref().and_then(|v| v.like.clone()),
         viewer_repost: post_view.viewer.as_ref().and_then(|v| v.repost.clone()),
-    }
+    })
 }
 fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
     match &bookmark.item {
         Union::Refs(BookmarkViewItemRefs::AppBskyFeedDefsPostView(post)) => {
-            Some(extract_post(post.as_ref()))
+            extract_post(post.as_ref())
         }
         // Return None for BlockedPost, NotFoundPost, or other union variants
         _ => None,
