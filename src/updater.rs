@@ -2,7 +2,19 @@
 use serde_json::Value;
 
 #[cfg(target_os = "windows")]
+fn cleanup_old_executable() {
+    if let Ok(current_exe) = std::env::current_exe() {
+        let old_exe = current_exe.with_extension("old.exe");
+        if old_exe.exists() {
+            let _ = std::fs::remove_file(&old_exe);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
 pub async fn check_and_update() {
+    cleanup_old_executable();
+
     let client = match reqwest::Client::builder().user_agent("redsky-updater").build() {
         Ok(c) => c,
         Err(_) => return,
@@ -69,11 +81,17 @@ fn apply_update(zip_bytes: &[u8]) {
         return;
     }
 
+    let script = format!(
+        "Expand-Archive -LiteralPath \"{}\" -DestinationPath \"{}\" -Force",
+        zip_path.display(),
+        extract_dir.display()
+    );
+
     let status = std::process::Command::new("powershell")
         .arg("-NoProfile")
         .arg("-NonInteractive")
         .arg("-Command")
-        .arg(format!("Expand-Archive -Path '{}' -DestinationPath '{}' -Force", zip_path.display(), extract_dir.display()))
+        .arg(&script)
         .creation_flags(CREATE_NO_WINDOW)
         .status();
 
@@ -88,27 +106,14 @@ fn apply_update(zip_bytes: &[u8]) {
 
     let new_exe = extract_dir.join("redsky.exe");
     if new_exe.exists() {
-        let bat_path = temp_dir.join("update_redsky.bat");
-        let bat_content = format!(
-            "@echo off\n\
-             timeout /t 2 /nobreak > NUL\n\
-             del \"{current_exe}\"\n\
-             copy \"{new_exe}\" \"{current_exe}\"\n\
-             start \"\" \"{current_exe}\"\n\
-             del \"%~f0\"\n",
-            current_exe = current_exe.display(),
-            new_exe = new_exe.display()
-        );
+        let old_exe = current_exe.with_extension("old.exe");
+        let _ = std::fs::remove_file(&old_exe); // in case a previous update failed to clean up
 
-        if std::fs::write(&bat_path, bat_content).is_ok() {
-            let spawned = std::process::Command::new("cmd")
-                .arg("/C")
-                .arg(&bat_path)
-                .creation_flags(CREATE_NO_WINDOW)
-                .spawn();
-
-            if spawned.is_ok() {
-                std::process::exit(0);
+        // On Windows, a running executable can be renamed, but not deleted/overwritten directly.
+        if std::fs::rename(&current_exe, &old_exe).is_ok() {
+            if std::fs::copy(&new_exe, &current_exe).is_err() {
+                // If copying the new one fails, try to restore the old one
+                let _ = std::fs::rename(&old_exe, &current_exe);
             }
         }
     }
