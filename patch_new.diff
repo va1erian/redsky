@@ -1,0 +1,15 @@
+<<<<<<< SEARCH
+            unread_notifications: 0,
+            notifications: Vec::new(),
+        }
+    }
+}
+=======
+            unread_notifications: 0,
+            notifications: Vec::new(),
+            settings: AppSettings::load(),
+            is_settings_window_open: false,
+        }
+    }
+}
+>>>>>>> REPLACE

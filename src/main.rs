@@ -42,6 +42,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let app = RedskyApp::new(msg_tx, result_tx.clone(), result_rx);
             let actor_ctx = _cc.egui_ctx.clone();
 
+            match app.settings.theme {
+                crate::app::AppTheme::System => {}
+                crate::app::AppTheme::Light => {
+                    _cc.egui_ctx.set_visuals(egui::Visuals::light());
+                }
+                crate::app::AppTheme::Dark => {
+                    _cc.egui_ctx.set_visuals(egui::Visuals::dark());
+                }
+            }
+
             //spawn actor thread with tokio enabled
             std::thread::spawn(move || {
                 let rt = Runtime::new().expect("Unable to create tokio runtime");
