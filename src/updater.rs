@@ -15,12 +15,18 @@ fn cleanup_old_executable() {
 pub async fn check_and_update() {
     cleanup_old_executable();
 
-    let client = match reqwest::Client::builder().user_agent("redsky-updater").build() {
+    let client = match reqwest::Client::builder()
+        .user_agent("redsky-updater")
+        .build()
+    {
         Ok(c) => c,
         Err(_) => return,
     };
 
-    let res = client.get("https://api.github.com/repos/va1erian/redsky/releases/latest").send().await;
+    let res = client
+        .get("https://api.github.com/repos/va1erian/redsky/releases/latest")
+        .send()
+        .await;
     if let Ok(response) = res {
         if let Ok(release) = response.json::<Value>().await {
             let tag_name = release["tag_name"].as_str().unwrap_or("");

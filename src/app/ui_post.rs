@@ -149,7 +149,7 @@ impl RedskyApp {
                                         } else {
                                             RichText::new(format!("{} x ❤", &post.like_count))
                                         };
-                                        let like_btn = ui.button(like_text);
+                                        let like_btn = ui.button(like_text).on_hover_text("Right-click to see likers");
                                         if like_btn.clicked() {
                                             let post_uri = post.uri.clone();
                                             let post_cid = post.cid.clone();
@@ -174,7 +174,7 @@ impl RedskyApp {
                                         } else {
                                             RichText::new(format!("{} x 🔃", &post.repost_count))
                                         };
-                                        let repost_btn = ui.button(repost_text);
+                                        let repost_btn = ui.button(repost_text).on_hover_text("Right-click to see reposters");
                                         if repost_btn.clicked() {
                                             let post_uri = post.uri.clone();
                                             let post_cid = post.cid.clone();

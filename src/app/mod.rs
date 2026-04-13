@@ -370,9 +370,8 @@ impl eframe::App for RedskyApp {
                                     // Bookmarks also needs to use FeedItem if I want to use make_post_view
                                     // or I should convert them.
                                     // In this patch I'll convert them for simplicity as a first step.
-                                    let mut bookmark_items = crate::app::into_feed_items(
-                                        self.bookmarks.iter().cloned()
-                                    );
+                                    let mut bookmark_items =
+                                        crate::app::into_feed_items(self.bookmarks.iter().cloned());
                                     self.make_post_view(ui, "Your bookmarks", &mut bookmark_items);
                                     // Note: changes to bookmark_items (like dehydration) won't persist back to self.bookmarks
                                     // this way. Ideally bookmarks should also be Vec<FeedItem>.
@@ -439,8 +438,14 @@ impl eframe::App for RedskyApp {
                     MainViewState::OwnPostFeed => {
                         let login = self.login.clone();
                         let mut maybe_post = self.user_posts.get_mut(&login).and_then(|p| p.take());
-                        let mut maybe_likes = self.user_likes_posts.get_mut(&login).and_then(|p| p.take());
-                        self.make_maybe_user_post_view(ui, &login, &mut maybe_post, &mut maybe_likes);
+                        let mut maybe_likes =
+                            self.user_likes_posts.get_mut(&login).and_then(|p| p.take());
+                        self.make_maybe_user_post_view(
+                            ui,
+                            &login,
+                            &mut maybe_post,
+                            &mut maybe_likes,
+                        );
                         self.user_posts.insert(login.clone(), maybe_post);
                         self.user_likes_posts.insert(login, maybe_likes);
                     }
