@@ -57,13 +57,13 @@ impl RedskyApp {
     fn make_post_inner_view(&self, ui: &mut Ui, post: &Post) {
         ui.horizontal(|ui| {
             ui.set_min_height(57.6f32);
-            if self.image_cache.contains_key(&post.avatar_img) {
+            if let Some(texture) = self.image_cache.get(&post.avatar_img) {
                 ui.vertical(|ui| {
                     ui.set_max_width(57.6f32);
                     self.make_buffer_image_view(
                         ui,
                         &post.avatar_img,
-                        self.image_cache.get(&post.avatar_img).unwrap(),
+                        texture,
                         Some(&post.avatar_img),
                     );
                 });
@@ -126,16 +126,11 @@ impl RedskyApp {
                                         ui.horizontal_wrapped(|ui| {
                                             ui.set_min_height(200f32);
                                             for embed in &post.embeds {
-                                                if self
-                                                    .image_cache
-                                                    .contains_key(&embed.thumbnail_url)
-                                                {
+                                                if let Some(texture) = self.image_cache.get(&embed.thumbnail_url) {
                                                     self.make_buffer_image_view(
                                                         ui,
                                                         &embed.thumbnail_url,
-                                                        self.image_cache
-                                                            .get(&embed.thumbnail_url)
-                                                            .unwrap(),
+                                                        texture,
                                                         Some(&embed.url),
                                                     );
                                                 }
