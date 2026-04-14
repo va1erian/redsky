@@ -1,0 +1,3 @@
+## 2024-05-24 - Double HashMap Lookup Anti-pattern in egui
+**Learning:** Found instances where `self.image_cache.contains_key(...)` was followed immediately by `self.image_cache.get(...).unwrap()` within continuous egui rendering loops. In Rust, a map's `contains_key` and `get` operations both traverse the data structure. Doing both consecutively results in two lookups per frame per image, which is a significant anti-pattern for UI performance.
+**Action:** Always replace the `contains_key` followed by `get` pattern with a single `if let Some(value) = map.get(key)` binding to halve the number of map lookups required for rendering.
