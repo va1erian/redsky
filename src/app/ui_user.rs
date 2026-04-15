@@ -160,20 +160,21 @@ impl RedskyApp {
                     match item {
                         FeedItem::Full(post) => {
                             for embed in &post.embeds {
-                                if !self.image_cache.contains_key(&embed.thumbnail_url) {
-                                    self.request_image(&embed.thumbnail_url);
-                                }
+                                if let Some(img_data) = self.image_cache.get(&embed.thumbnail_url) {
+                                    if let Some(texture) = img_data {
+                                        let img_view = ui.add(egui::Image::new(texture).max_width(current_size).max_height(current_size));
+                                        let sensing_img = img_view.interact(egui::Sense::click());
 
-                                if let Some(texture) = self.image_cache.get(&embed.thumbnail_url).unwrap_or(&None) {
-                                    let img_view = ui.add(egui::Image::new(texture).max_width(current_size).max_height(current_size));
-                                    let sensing_img = img_view.interact(egui::Sense::click());
-
-                                    if sensing_img.clicked() {
-                                        self.post_ui_message(RedskyUiMsg::ShowBigImageView {
-                                            img_uri: embed.url.clone(),
-                                        });
+                                        if sensing_img.clicked() {
+                                            self.post_ui_message(RedskyUiMsg::ShowBigImageView {
+                                                img_uri: embed.url.clone(),
+                                            });
+                                        }
+                                    } else {
+                                        ui.spinner();
                                     }
                                 } else {
+                                    self.request_image(&embed.thumbnail_url);
                                     ui.spinner();
                                 }
                             }

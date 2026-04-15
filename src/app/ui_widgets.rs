@@ -165,11 +165,11 @@ impl RedskyApp {
                     egui::CentralPanel::default().show_inside(ui, |ui| {
                         egui::ScrollArea::both().show(ui, |ui| {
                             ui.centered_and_justified(|ui| {
-                                if self.image_cache.contains_key(img) {
+                                if let Some(img_data) = self.image_cache.get(img) {
                                     self.make_buffer_image_view(
                                         ui,
                                         img,
-                                        self.image_cache.get(img).unwrap(),
+                                        img_data,
                                         None,
                                     );
                                 } else {
