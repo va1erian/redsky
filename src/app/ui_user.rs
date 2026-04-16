@@ -136,31 +136,29 @@ impl RedskyApp {
         });
         self.media_image_sizes.insert(username.to_string(), current_size);
 
-        let scroll_offset_y;
-        let content_size_y;
+
+
 
         let scroll_area = egui::ScrollArea::vertical();
         let scroll_output = scroll_area.show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                for (_idx, item) in posts.iter_mut().enumerate() {
+                for item in posts.iter_mut() {
                     // Rehydration check (MUST happen before matching if we need data)
                     let mut rehydrate_uri = None;
-                    let mut rehydrate_height = None;
-                    if let FeedItem::Dehydrated { uri, height } = item {
+                    if let FeedItem::Dehydrated { uri } = item {
                         // Dehydrated items will just trigger rehydration immediately in Media View
                         // as we don't do complex virtualization here anymore
                         rehydrate_uri = Some(uri.clone());
-                        rehydrate_height = height.clone();
                     }
                     if let Some(uri) = rehydrate_uri {
                         if let Some(post) = self.post_cache.remove(&uri) {
-                            *item = FeedItem::Full(post, rehydrate_height);
+                            *item = FeedItem::Full(post);
                             self.post_cache_order.retain(|u| u != &uri);
                         }
                     }
 
                     match item {
-                        FeedItem::Full(post, _) => {
+                        FeedItem::Full(post) => {
                             for embed in &post.embeds {
                                 match self.image_cache.get(&embed.thumbnail_url) {
                                     Some(Some(texture)) => {
@@ -183,14 +181,14 @@ impl RedskyApp {
                                 }
                             }
                         }
-                        FeedItem::Dehydrated { uri: _, height: _ } => {}
+                        FeedItem::Dehydrated { uri: _ } => {}
                     }
                 }
             });
         });
 
-        scroll_offset_y = scroll_output.state.offset.y;
-        content_size_y = scroll_output.content_size.y;
+        let scroll_offset_y = scroll_output.state.offset.y;
+        let content_size_y = scroll_output.content_size.y;
 
         // Infinite Scroll Check
         let viewport_height = ui.available_height();

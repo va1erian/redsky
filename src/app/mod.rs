@@ -39,6 +39,7 @@ pub struct RedskyApp {
     post_reposters_cache: HashMap<StrongRef, Vec<UserProfile>>,
     post_replies_cache: HashMap<StrongRef, Option<Vec<FeedItem>>>,
     opened_image_views: HashSet<String>,
+    opened_raw_views: HashMap<String, String>, // uri -> raw_json
     download_tasks: HashMap<u64, DownloadTask>,
     next_download_id: u64,
     is_search_window_open: bool,
@@ -109,6 +110,7 @@ impl RedskyApp {
             post_reposters_cache: HashMap::new(),
             post_replies_cache: HashMap::new(),
             opened_image_views: HashSet::new(),
+            opened_raw_views: HashMap::new(),
             download_tasks: HashMap::new(),
             next_download_id: 0,
             is_search_window_open: false,
@@ -128,17 +130,17 @@ impl RedskyApp {
     }
 }
 impl RedskyApp {
-    fn post_message(&self, msg: BskyActorMsg) -> () {
+    fn post_message(&self, msg: BskyActorMsg) {
         let _ = self.tx.send(msg);
     }
-    fn post_ui_message(&self, msg: RedskyUiMsg) -> () {
+    fn post_ui_message(&self, msg: RedskyUiMsg) {
         let _ = self.ui_tx.send(msg);
     }
     fn request_image(&mut self, img_url: &str) {
         if img_url.is_empty() {
             return;
         }
-        if let None = self.image_cache.get(img_url) {
+        if self.image_cache.get(img_url).is_none() {
             println!("requesting image {}", img_url);
             self.image_cache.insert(img_url.to_string(), None);
             self.post_message(BskyActorMsg::LoadImage {
@@ -163,7 +165,7 @@ impl RedskyApp {
     {
         // Update timeline
         for item in &mut self.timeline {
-            if let FeedItem::Full(post, _) = item {
+            if let FeedItem::Full(post) = item {
                 if post.uri == post_uri {
                     update_fn(post);
                 }
@@ -175,51 +177,45 @@ impl RedskyApp {
             }
         }
         // Update user posts
-        for posts in self.user_posts.values_mut() {
-            if let Some(posts) = posts {
-                for item in posts {
-                    if let FeedItem::Full(post, _) = item {
-                        if post.uri == post_uri {
-                            update_fn(post);
-                        }
-                        if let Some(quoted) = &mut post.quoted_post {
-                            if quoted.uri == post_uri {
-                                update_fn(quoted);
-                            }
+        for posts in self.user_posts.values_mut().flatten() {
+            for item in posts {
+                if let FeedItem::Full(post) = item {
+                    if post.uri == post_uri {
+                        update_fn(post);
+                    }
+                    if let Some(quoted) = &mut post.quoted_post {
+                        if quoted.uri == post_uri {
+                            update_fn(quoted);
                         }
                     }
                 }
             }
         }
         // Update user likes posts
-        for posts in self.user_likes_posts.values_mut() {
-            if let Some(posts) = posts {
-                for item in posts {
-                    if let FeedItem::Full(post, _) = item {
-                        if post.uri == post_uri {
-                            update_fn(post);
-                        }
-                        if let Some(quoted) = &mut post.quoted_post {
-                            if quoted.uri == post_uri {
-                                update_fn(quoted);
-                            }
+        for posts in self.user_likes_posts.values_mut().flatten() {
+            for item in posts {
+                if let FeedItem::Full(post) = item {
+                    if post.uri == post_uri {
+                        update_fn(post);
+                    }
+                    if let Some(quoted) = &mut post.quoted_post {
+                        if quoted.uri == post_uri {
+                            update_fn(quoted);
                         }
                     }
                 }
             }
         }
         // Update replies cache
-        for posts in self.post_replies_cache.values_mut() {
-            if let Some(posts) = posts {
-                for item in posts {
-                    if let FeedItem::Full(post, _) = item {
-                        if post.uri == post_uri {
-                            update_fn(post);
-                        }
-                        if let Some(quoted) = &mut post.quoted_post {
-                            if quoted.uri == post_uri {
-                                update_fn(quoted);
-                            }
+        for posts in self.post_replies_cache.values_mut().flatten() {
+            for item in posts {
+                if let FeedItem::Full(post) = item {
+                    if post.uri == post_uri {
+                        update_fn(post);
+                    }
+                    if let Some(quoted) = &mut post.quoted_post {
+                        if quoted.uri == post_uri {
+                            update_fn(quoted);
                         }
                     }
                 }

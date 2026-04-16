@@ -8,7 +8,6 @@ use crate::app::RedskyApp;
 
 use bsky_actor::BskyActor;
 use bsky_sdk::BskyAgent;
-use tokio;
 use tokio::runtime::Runtime;
 
 fn load_icon() -> egui::IconData {

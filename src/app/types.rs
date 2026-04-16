@@ -31,14 +31,15 @@ pub struct Post {
     pub viewer_like: Option<String>,
     pub viewer_repost: Option<String>,
     pub thread_root: Option<StrongRef>,
+    pub raw_json: String,
 }
 pub enum FeedItem {
-    Full(Post, Option<f32>),
-    Dehydrated { uri: String, height: Option<f32> },
+    Full(Post),
+    Dehydrated { uri: String },
 }
 
 pub fn into_feed_items(posts: impl IntoIterator<Item = Post>) -> Vec<FeedItem> {
-    posts.into_iter().map(|post| FeedItem::Full(post, None)).collect()
+    posts.into_iter().map(FeedItem::Full).collect()
 }
 
 #[derive(Debug)]
@@ -173,6 +174,17 @@ pub enum RedskyUiMsg {
     CloseBigImageView {
         img_uri: String,
     },
+    ShowRawPostView {
+        post_uri: String,
+        raw_json: String,
+    },
+    CloseRawPostView {
+        post_uri: String,
+    },
+    DeletePost {
+        post_uri: String,
+        post_cid: Cid,
+    },
     ShowErrorMsg {
         error: String,
     },
@@ -228,6 +240,10 @@ pub enum BskyActorMsg {
     Unlike {
         post_uri: String,
         like_record_uri: String,
+    },
+    DeletePost {
+        post_uri: String,
+        post_cid: Cid,
     },
     Repost {
         post_ref: StrongRef,

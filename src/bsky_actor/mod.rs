@@ -13,12 +13,11 @@ use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
-use atrium_api::types::string::{AtIdentifier, Datetime, RecordKey};
+use atrium_api::types::string::{AtIdentifier, Datetime, RecordKey, Cid};
 use atrium_api::types::Object;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
 use bsky_sdk::BskyAgent;
-use reqwest;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
@@ -128,6 +127,7 @@ fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
                 viewer_like: None,
                 viewer_repost: None,
                 thread_root: None,
+                raw_json: serde_json::to_string_pretty(&view_record).unwrap_or_default(),
             })
         } else {
             None
@@ -178,7 +178,7 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
         like_count: post_view.like_count.unwrap_or(0),
         repost_count: post_view.repost_count.unwrap_or(0),
         embeds: images,
-        quoted_post: quoted_post.map(|post| Box::new(post)),
+        quoted_post: quoted_post.map(Box::new),
         is_reply: post_record_data.reply.is_some(),
         viewer_like: post_view.viewer.as_ref().and_then(|v| v.like.clone()),
         viewer_repost: post_view.viewer.as_ref().and_then(|v| v.repost.clone()),
@@ -188,6 +188,7 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
                 cid: reply.root.cid.clone(),
             })
         }),
+        raw_json: serde_json::to_string_pretty(&post_view).unwrap_or_default(),
     })
 }
 fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
@@ -214,6 +215,7 @@ impl BskyJob {
                 post_uri,
                 like_record_uri,
             } => self.unlike(post_uri.clone(), like_record_uri.clone()).await,
+            BskyActorMsg::DeletePost { post_uri, post_cid } => self.delete_post(post_uri.clone(), post_cid.clone()).await,
             BskyActorMsg::Repost { post_ref } => self.repost(post_ref.clone()).await,
             BskyActorMsg::Unrepost {
                 post_uri,
