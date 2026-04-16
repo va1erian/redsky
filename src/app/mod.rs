@@ -163,7 +163,7 @@ impl RedskyApp {
     {
         // Update timeline
         for item in &mut self.timeline {
-            if let FeedItem::Full(post) = item {
+            if let FeedItem::Full(post, _) = item {
                 if post.uri == post_uri {
                     update_fn(post);
                 }
@@ -178,7 +178,7 @@ impl RedskyApp {
         for posts in self.user_posts.values_mut() {
             if let Some(posts) = posts {
                 for item in posts {
-                    if let FeedItem::Full(post) = item {
+                    if let FeedItem::Full(post, _) = item {
                         if post.uri == post_uri {
                             update_fn(post);
                         }
@@ -195,7 +195,7 @@ impl RedskyApp {
         for posts in self.user_likes_posts.values_mut() {
             if let Some(posts) = posts {
                 for item in posts {
-                    if let FeedItem::Full(post) = item {
+                    if let FeedItem::Full(post, _) = item {
                         if post.uri == post_uri {
                             update_fn(post);
                         }
@@ -212,7 +212,7 @@ impl RedskyApp {
         for posts in self.post_replies_cache.values_mut() {
             if let Some(posts) = posts {
                 for item in posts {
-                    if let FeedItem::Full(post) = item {
+                    if let FeedItem::Full(post, _) = item {
                         if post.uri == post_uri {
                             update_fn(post);
                         }
