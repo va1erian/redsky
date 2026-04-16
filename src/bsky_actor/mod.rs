@@ -225,6 +225,7 @@ impl BskyJob {
                 self.get_user_likes(username, cursor).await
             }
             BskyActorMsg::SearchActors { query } => self.search_actors(query).await,
+            BskyActorMsg::SearchPosts { query, cursor } => self.search_posts(query, cursor).await,
             BskyActorMsg::LoadImage { url } => self.load_image(url).await,
             BskyActorMsg::StartImageDownload { id, username, path } => {
                 self.download_all_images(*id, username, path).await

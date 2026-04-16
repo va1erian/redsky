@@ -44,6 +44,10 @@ pub struct RedskyApp {
     is_search_window_open: bool,
     search_query: String,
     search_results: Vec<UserProfile>,
+    is_search_posts_window_open: bool,
+    search_posts_query: String,
+    search_posts_results: Option<Vec<FeedItem>>,
+    search_posts_cursor: Option<String>,
     unread_notifications: i64,
     notifications: Vec<AppNotification>,
     remember_me: bool,
@@ -109,6 +113,10 @@ impl RedskyApp {
             is_search_window_open: false,
             search_query: String::new(),
             search_results: Vec::new(),
+            is_search_posts_window_open: false,
+            search_posts_query: String::new(),
+            search_posts_results: None,
+            search_posts_cursor: None,
             unread_notifications: 0,
             notifications: Vec::new(),
             settings: AppSettings::load(),
@@ -257,6 +265,9 @@ impl eframe::App for RedskyApp {
         if self.is_search_window_open {
             self.make_search_window(ctx);
         }
+        if self.is_search_posts_window_open {
+            self.make_search_posts_window(ctx);
+        }
         if self.is_settings_window_open {
             self.make_settings_window(ctx);
         }
@@ -283,6 +294,9 @@ impl eframe::App for RedskyApp {
                         }
                         if ui.button("Search accounts...").clicked() {
                             self.is_search_window_open = true;
+                        }
+                        if ui.button("Search posts...").clicked() {
+                            self.is_search_posts_window_open = true;
                         }
                         if ui.button("Settings...").clicked() {
                             self.is_settings_window_open = true;

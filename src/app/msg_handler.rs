@@ -283,6 +283,18 @@ impl RedskyApp {
                 }
                 self.search_results = results;
             }
+            RedskyUiMsg::ShowSearchPostsResults { posts, cursor, append } => {
+                self.request_post_images(&posts);
+                let new_items = crate::app::into_feed_items(posts);
+                if append {
+                    if let Some(existing_posts) = self.search_posts_results.as_mut() {
+                        existing_posts.extend(new_items);
+                    }
+                } else {
+                    self.search_posts_results = Some(new_items);
+                }
+                self.search_posts_cursor = cursor;
+            }
         }
     }
 }
