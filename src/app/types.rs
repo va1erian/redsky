@@ -30,6 +30,7 @@ pub struct Post {
     pub is_reply: bool,
     pub viewer_like: Option<String>,
     pub viewer_repost: Option<String>,
+    pub raw_json: String,
 }
 pub enum FeedItem {
     Full(Post),
@@ -172,6 +173,17 @@ pub enum RedskyUiMsg {
     CloseBigImageView {
         img_uri: String,
     },
+    ShowRawPostView {
+        post_uri: String,
+        raw_json: String,
+    },
+    CloseRawPostView {
+        post_uri: String,
+    },
+    DeletePost {
+        post_uri: String,
+        post_cid: Cid,
+    },
     ShowErrorMsg {
         error: String,
     },
@@ -221,6 +233,10 @@ pub enum BskyActorMsg {
     Unlike {
         post_uri: String,
         like_record_uri: String,
+    },
+    DeletePost {
+        post_uri: String,
+        post_cid: Cid,
     },
     Repost {
         post_ref: StrongRef,

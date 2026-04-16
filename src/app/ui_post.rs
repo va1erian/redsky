@@ -118,7 +118,7 @@ impl RedskyApp {
                                             .corner_radius(8)
                                             .stroke(egui::Stroke::new(1.0, egui::Color32::GRAY))
                                             .show(ui, |ui| {
-                                                self.make_post_inner_view(ui, &quoted_post);
+                                                self.make_post_inner_view(ui, quoted_post);
                                             });
                                     }
 
@@ -192,7 +192,25 @@ impl RedskyApp {
                                             );
                                         });
 
-                                        let _ = ui.button("…");
+                                        ui.menu_button("…", |ui| {
+                                            if ui.add_enabled(
+                                                post.author == self.login,
+                                                egui::Button::new("Delete Post")
+                                            ).clicked() {
+                                                self.post_ui_message(RedskyUiMsg::DeletePost {
+                                                    post_uri: post.uri.clone(),
+                                                    post_cid: post.cid.clone(),
+                                                });
+                                                ui.close();
+                                            }
+                                            if ui.button("Raw View").clicked() {
+                                                self.post_ui_message(RedskyUiMsg::ShowRawPostView {
+                                                    post_uri: post.uri.clone(),
+                                                    raw_json: post.raw_json.clone(),
+                                                });
+                                                ui.close();
+                                            }
+                                        });
                                     });
                                     ui.separator();
                                 });

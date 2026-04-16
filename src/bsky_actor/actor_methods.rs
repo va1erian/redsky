@@ -128,6 +128,36 @@ impl BskyJob {
         })
     }
 
+    pub async fn delete_post(
+        &self,
+        post_uri: String,
+        _post_cid: Cid,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("deleting post");
+        let parts: Vec<&str> = post_uri.split('/').collect();
+        let rkey = parts.last().ok_or("Invalid post record URI")?;
+
+        let session = self.bsky_agent.api.com.atproto.server.get_session().await?;
+
+        self.bsky_agent
+            .api
+            .com
+            .atproto
+            .repo
+            .delete_record(
+                atrium_api::com::atproto::repo::delete_record::InputData {
+                    collection: "app.bsky.feed.post".parse()?,
+                    repo: AtIdentifier::Did(session.data.did),
+                    rkey: RecordKey::new(rkey.to_string()).map_err(|e| e.to_string())?,
+                    swap_commit: None,
+                    swap_record: None,
+                }
+                .into(),
+            )
+            .await?;
+        Ok(RedskyUiMsg::ActionSucceeded())
+    }
+
     async fn unlike(
         &self,
         _post_uri: String,
@@ -241,7 +271,7 @@ impl BskyJob {
             let replies = match &post_data.replies {
                 Some(reply_list) => reply_list
                     .iter()
-                    .map(|reply| match reply {
+                    .flat_map(|reply| match reply {
                         Union::Refs(maybe_reply) => {
                             if let ThreadViewPostRepliesItem::ThreadViewPost(view) = maybe_reply {
                                 extract_post(&view.post).into_iter().collect()
@@ -253,7 +283,6 @@ impl BskyJob {
                             vec![]
                         }
                     })
-                    .flatten()
                     .collect(),
                 None => {
                     vec![]
@@ -528,7 +557,7 @@ impl BskyJob {
                 .data
                 .bookmarks
                 .iter()
-                .flat_map(|post_view| extract_post_from_bookmark(post_view))
+                .flat_map(extract_post_from_bookmark)
                 .collect(),
         })
     }
@@ -642,7 +671,7 @@ impl BskyJob {
                     let resp = reqwest::get(&url).await?;
                     let bytes = resp.bytes().await?;
 
-                    let raw_filename = url.split('/').last().unwrap_or("image");
+                    let raw_filename = url.split('/').next_back().unwrap_or("image");
                     let extension = if raw_filename.contains("@png") {
                         "png"
                     } else if raw_filename.contains("@jpeg") || raw_filename.contains("@jpg") {
@@ -759,7 +788,7 @@ impl BskyJob {
             )
             .await?;
 
-        let count = response.data.count as i64;
+        let count = response.data.count;
         Ok(RedskyUiMsg::NotifyUnreadCount { count })
     }
 
