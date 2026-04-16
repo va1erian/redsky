@@ -12,12 +12,27 @@ impl RedskyApp {
                     .with_title(format!("Thread {}", &repost_ref.uri))
                     .with_inner_size([400.0, 600.0]),
                 |ui, _| {
-                    egui::CentralPanel::default().show_inside(ui, |ui| match &mut posts_opt {
-                        Some(posts) => {
-                            self.make_post_view(ui, "Thread", posts);
-                        }
-                        None => {
-                            self.make_placeholder_post_view(ui, "Loading thread");
+                    egui::CentralPanel::default().show_inside(ui, |ui| {
+                        ui.vertical(|ui| {
+                            egui::MenuBar::new().ui(ui, |ui| {
+                                ui.menu_button("View", |ui| {
+                                    if ui.button("Refresh thread").clicked() {
+                                        self.post_replies_cache.insert(repost_ref.clone(), None);
+                                        self.post_message(BskyActorMsg::GetPostAndReplies {
+                                            post_ref: repost_ref.clone(),
+                                        });
+                                        ui.close();
+                                    }
+                                });
+                            });
+                        });
+                        match &mut posts_opt {
+                            Some(posts) => {
+                                self.make_post_view(ui, "Thread", posts);
+                            }
+                            None => {
+                                self.make_placeholder_post_view(ui, "Loading thread");
+                            }
                         }
                     });
 

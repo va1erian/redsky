@@ -304,6 +304,13 @@ impl eframe::App for RedskyApp {
                             std::process::exit(0);
                         }
                     });
+                    ui.menu_button("View", |ui| {
+                        if ui.button("Refresh timeline").clicked() {
+                            self.timeline_cursor = None;
+                            self.post_message(BskyActorMsg::GetTimeline { cursor: None });
+                            ui.close();
+                        }
+                    });
                 });
                 if self.main_view_state != MainViewState::Login {
                     ui.vertical(|ui| {

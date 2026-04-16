@@ -246,17 +246,27 @@ impl RedskyApp {
                     .with_title(format!("Posts of {}", username.clone()))
                     .with_inner_size([400.0, 600.0]),
                 |ui, _| {
-                    egui::Panel::top("menu_bar").show_inside(ui, |ui| {
-                        egui::MenuBar::new().ui(ui, |ui| {
-                            ui.menu_button("Actions", |ui| {
-                                if ui.button("Download All Images").clicked() {
-                                    to_download.push(username.clone());
-                                    ui.close();
-                                }
+                    egui::CentralPanel::default().show_inside(ui, |ui| {
+                        ui.vertical(|ui| {
+                            egui::MenuBar::new().ui(ui, |ui| {
+                                ui.menu_button("Actions", |ui| {
+                                    if ui.button("Download All Images").clicked() {
+                                        to_download.push(username.clone());
+                                        ui.close();
+                                    }
+                                });
+                                ui.menu_button("View", |ui| {
+                                    if ui.button("Refresh posts").clicked() {
+                                        self.user_cursors.remove(&username);
+                                        self.post_message(BskyActorMsg::GetUserPosts {
+                                            username: username.clone(),
+                                            cursor: None,
+                                        });
+                                        ui.close();
+                                    }
+                                });
                             });
                         });
-                    });
-                    egui::CentralPanel::default().show_inside(ui, |ui| {
                         self.make_maybe_user_post_view(ui, &username, &mut posts, &mut liked_posts);
                     });
 
