@@ -145,20 +145,22 @@ impl RedskyApp {
                 for item in posts.iter_mut() {
                     // Rehydration check (MUST happen before matching if we need data)
                     let mut rehydrate_uri = None;
-                    if let FeedItem::Dehydrated { uri } = item {
+                    let mut rehydrate_height = None;
+                    if let FeedItem::Dehydrated { uri, height } = item {
                         // Dehydrated items will just trigger rehydration immediately in Media View
                         // as we don't do complex virtualization here anymore
                         rehydrate_uri = Some(uri.clone());
+                        rehydrate_height = height.clone();
                     }
                     if let Some(uri) = rehydrate_uri {
                         if let Some(post) = self.post_cache.remove(&uri) {
-                            *item = FeedItem::Full(post);
+                            *item = FeedItem::Full(post, rehydrate_height);
                             self.post_cache_order.retain(|u| u != &uri);
                         }
                     }
 
                     match item {
-                        FeedItem::Full(post) => {
+                        FeedItem::Full(post, _) => {
                             for embed in &post.embeds {
                                 match self.image_cache.get(&embed.thumbnail_url) {
                                     Some(Some(texture)) => {
@@ -181,7 +183,7 @@ impl RedskyApp {
                                 }
                             }
                         }
-                        FeedItem::Dehydrated { uri: _ } => {}
+                        FeedItem::Dehydrated { uri: _, height: _ } => {}
                     }
                 }
             });
