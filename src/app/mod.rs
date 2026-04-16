@@ -113,6 +113,7 @@ impl RedskyApp {
                 viewer_like: None,
                 viewer_repost: None,
                 thread_root: None,
+                raw_json: "{}".to_string(),
             }));
             timeline.push(FeedItem::Full(Post {
                 uri: "at://mock-uri-2".to_string(),
@@ -130,6 +131,7 @@ impl RedskyApp {
                 viewer_like: None,
                 viewer_repost: None,
                 thread_root: None,
+                raw_json: "{}".to_string(),
             }));
             let _ = tx.send(BskyActorMsg::GetUnreadCount());
         }

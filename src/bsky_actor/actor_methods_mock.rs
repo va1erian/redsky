@@ -93,6 +93,7 @@ impl BskyJob {
             viewer_like: None,
             viewer_repost: None,
             thread_root: None,
+            raw_json: "{}".to_string(),
         };
         let reply = Post {
             uri: "at://mock-reply-uri".to_string(),
@@ -110,6 +111,7 @@ impl BskyJob {
             viewer_like: None,
             viewer_repost: None,
             thread_root: Some(strong_ref.clone()),
+            raw_json: "{}".to_string(),
         };
         Ok(RedskyUiMsg::NotifyPostAndRepliesLoaded {
             post,
@@ -242,6 +244,14 @@ impl BskyJob {
         _msg_body: &String,
         _image_paths: &Vec<String>,
         _reply_to: &Option<(StrongRef, StrongRef)>,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(RedskyUiMsg::ActionSucceeded())
+    }
+
+    async fn delete_post(
+        &self,
+        _post_uri: String,
+        _post_cid: Cid,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         Ok(RedskyUiMsg::ActionSucceeded())
     }
