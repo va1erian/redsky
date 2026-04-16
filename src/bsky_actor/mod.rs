@@ -37,6 +37,7 @@ pub struct BskyActor {
 struct BskyJob {
     job: BskyActorMsg,
     tx: Sender<RedskyUiMsg>,
+    #[allow(dead_code)]
     bsky_agent: BskyAgent,
     ctx: egui::Context, //for force repaint
 }
