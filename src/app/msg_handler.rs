@@ -194,8 +194,8 @@ impl RedskyApp {
                 };
                 self.request_post_images(&replies);
                 self.request_post_images(&vec![post.clone()]);
-                let mut items = vec![FeedItem::Full(post, None)];
-                items.extend(replies.into_iter().map(|p| FeedItem::Full(p, None)));
+                let mut items = vec![FeedItem::Full(post)];
+                items.extend(replies.into_iter().map(FeedItem::Full));
                 self.post_replies_cache.insert(strong_ref, Some(items));
             }
             RedskyUiMsg::LogInSucceededMsg() => {

@@ -103,7 +103,7 @@ impl RedskyApp {
                 ui.vertical(|ui| {
                     for (idx, item) in posts.iter_mut().enumerate() {
                         match item {
-                            FeedItem::Full(post, height) => {
+                            FeedItem::Full(post) => {
                                 let post_block = ui.vertical(|ui| {
                                     if idx == 0 && self.scroll_to_top {
                                         ui.scroll_to_rect(ui.max_rect(), Some(egui::Align::TOP));
@@ -233,31 +233,26 @@ impl RedskyApp {
                                         },
                                     });
                                 }
-                                *height = Some(post_block.response.rect.height());
                             }
-                            FeedItem::Dehydrated { uri: _, height } => {
-                                let h = height.unwrap_or(150.0);
-                                ui.allocate_ui(egui::vec2(ui.available_width(), h), |ui| {
-                                    ui.vertical_centered(|ui| {
-                                        ui.add_space(h / 2.0 - 10.0);
-                                        ui.spinner();
-                                    });
+                            FeedItem::Dehydrated { uri: _ } => {
+                                ui.vertical_centered(|ui| {
+                                    ui.add_space(50.0);
+                                    ui.spinner();
+                                    ui.add_space(50.0);
                                 });
                             }
                         }
 
                         // Rehydration check
                         let mut rehydrate_uri = None;
-                        let mut rehydrate_height = None;
-                        if let FeedItem::Dehydrated { uri, height } = item {
+                        if let FeedItem::Dehydrated { uri } = item {
                             if ui.is_rect_visible(ui.available_rect_before_wrap()) {
                                 rehydrate_uri = Some(uri.clone());
-                                rehydrate_height = height.clone();
                             }
                         }
                         if let Some(uri) = rehydrate_uri {
                             if let Some(post) = self.post_cache.remove(&uri) {
-                                *item = FeedItem::Full(post, rehydrate_height);
+                                *item = FeedItem::Full(post);
                                 self.post_cache_order.retain(|u| u != &uri);
                             }
                         }
@@ -304,15 +299,15 @@ impl RedskyApp {
         let visible_idx = (scroll_offset_y / 200.0) as i32;
         for (idx, item) in posts.iter_mut().enumerate() {
             let mut should_dehydrate = false;
-            if let FeedItem::Full(_, _) = item {
+            if let FeedItem::Full(_) = item {
                 if (idx as i32 - visible_idx).abs() > 50 {
                     should_dehydrate = true;
                 }
             }
 
             if should_dehydrate {
-                if let FeedItem::Full(post, height) =
-                    std::mem::replace(item, FeedItem::Dehydrated { uri: String::new(), height: None })
+                if let FeedItem::Full(post) =
+                    std::mem::replace(item, FeedItem::Dehydrated { uri: String::new() })
                 {
                     let uri = post.uri.clone();
                     if !uri.is_empty() {
@@ -325,7 +320,7 @@ impl RedskyApp {
                                 self.post_cache.remove(&oldest_uri);
                             }
                         }
-                        *item = FeedItem::Dehydrated { uri, height };
+                        *item = FeedItem::Dehydrated { uri };
                     }
                 }
             }

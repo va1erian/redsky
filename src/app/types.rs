@@ -34,12 +34,12 @@ pub struct Post {
     pub raw_json: String,
 }
 pub enum FeedItem {
-    Full(Post, Option<f32>),
-    Dehydrated { uri: String, height: Option<f32> },
+    Full(Post),
+    Dehydrated { uri: String },
 }
 
 pub fn into_feed_items(posts: impl IntoIterator<Item = Post>) -> Vec<FeedItem> {
-    posts.into_iter().map(|post| FeedItem::Full(post, None)).collect()
+    posts.into_iter().map(FeedItem::Full).collect()
 }
 
 #[derive(Debug)]

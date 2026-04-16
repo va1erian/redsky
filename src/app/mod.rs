@@ -165,7 +165,7 @@ impl RedskyApp {
     {
         // Update timeline
         for item in &mut self.timeline {
-            if let FeedItem::Full(post, _) = item {
+            if let FeedItem::Full(post) = item {
                 if post.uri == post_uri {
                     update_fn(post);
                 }
