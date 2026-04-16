@@ -194,6 +194,11 @@ pub enum RedskyUiMsg {
     ShowSearchResults {
         results: Vec<UserProfile>,
     },
+    ShowSearchPostsResults {
+        posts: Vec<Post>,
+        cursor: Option<String>,
+        append: bool,
+    },
     NotifyUnreadCount {
         count: i64,
     },
@@ -251,6 +256,10 @@ pub enum BskyActorMsg {
     },
     SearchActors {
         query: String,
+    },
+    SearchPosts {
+        query: String,
+        cursor: Option<String>,
     },
     LoadImage {
         url: String,

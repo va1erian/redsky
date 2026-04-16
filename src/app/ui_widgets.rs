@@ -326,4 +326,46 @@ impl RedskyApp {
             },
         );
     }
+
+    fn make_search_posts_window(&mut self, ctx: &egui::Context) {
+        ctx.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("__search_posts"),
+            egui::ViewportBuilder::default()
+                .with_title("Search Posts")
+                .with_inner_size([500.0, 700.0]),
+            |ui, _| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.heading("Search Posts");
+                        ui.horizontal(|ui| {
+                            let text_edit_response = ui.text_edit_singleline(&mut self.search_posts_query);
+                            let enter_pressed = text_edit_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            if ui.button("Search").clicked() || enter_pressed {
+                                self.search_posts_results = Some(vec![]);
+                                self.search_posts_cursor = None;
+                                self.post_message(BskyActorMsg::SearchPosts {
+                                    query: self.search_posts_query.clone(),
+                                    cursor: None,
+                                });
+                            }
+                        });
+                        ui.separator();
+
+                        let results = self.search_posts_results.take();
+                        if let Some(mut posts) = results {
+                            self.make_post_view(ui, "Search Results", &mut posts);
+                            self.search_posts_results = Some(posts);
+                        } else {
+                            ui.label("Enter a query and click Search.");
+                            self.search_posts_results = None;
+                        }
+                    });
+                });
+
+                if ui.ctx().input(|i| i.viewport().close_requested()) {
+                    self.is_search_posts_window_open = false;
+                }
+            },
+        );
+    }
 }

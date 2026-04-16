@@ -243,6 +243,14 @@ impl RedskyApp {
                         });
                         self.timeline_cursor = None; // Avoid duplicate requests
                     }
+                } else if username == "Search Results" {
+                    if let Some(cursor) = self.search_posts_cursor.clone() {
+                        self.post_message(BskyActorMsg::SearchPosts {
+                            query: self.search_posts_query.clone(),
+                            cursor: Some(cursor),
+                        });
+                        self.search_posts_cursor = None; // Avoid duplicate requests
+                    }
                 } else if username != "Thread" {
                     if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
                         self.post_message(BskyActorMsg::GetUserPosts {
