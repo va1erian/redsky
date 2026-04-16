@@ -136,13 +136,13 @@ impl RedskyApp {
         });
         self.media_image_sizes.insert(username.to_string(), current_size);
 
-        let scroll_offset_y;
-        let content_size_y;
+
+
 
         let scroll_area = egui::ScrollArea::vertical();
         let scroll_output = scroll_area.show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                for (_idx, item) in posts.iter_mut().enumerate() {
+                for item in posts.iter_mut() {
                     // Rehydration check (MUST happen before matching if we need data)
                     let mut rehydrate_uri = None;
                     if let FeedItem::Dehydrated { uri } = item {
@@ -187,8 +187,8 @@ impl RedskyApp {
             });
         });
 
-        scroll_offset_y = scroll_output.state.offset.y;
-        content_size_y = scroll_output.content_size.y;
+        let scroll_offset_y = scroll_output.state.offset.y;
+        let content_size_y = scroll_output.content_size.y;
 
         // Infinite Scroll Check
         let viewport_height = ui.available_height();

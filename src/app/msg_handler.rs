@@ -1,5 +1,5 @@
 impl RedskyApp {
-    fn process_message(&mut self, ctx: &egui::Context, msg: RedskyUiMsg) -> () {
+    fn process_message(&mut self, ctx: &egui::Context, msg: RedskyUiMsg) {
         match msg {
             RedskyUiMsg::ActionSucceeded() => {
                 self.post_message(BskyActorMsg::GetTimeline { cursor: None });
@@ -32,7 +32,7 @@ impl RedskyApp {
             }
             RedskyUiMsg::ShowUserProfile { profile } => {
                 self.user_infos_cache
-                    .insert(profile.handle.clone(), profile.into());
+                    .insert(profile.handle.clone(), profile);
             }
             RedskyUiMsg::ShowUserPostsMsg {
                 username,
@@ -83,6 +83,15 @@ impl RedskyApp {
             }
             RedskyUiMsg::ShowErrorMsg { error } => {
                 print!("error: {}", error);
+            }
+            RedskyUiMsg::DeletePost { post_uri, post_cid } => {
+                self.post_message(BskyActorMsg::DeletePost { post_uri, post_cid });
+            }
+            RedskyUiMsg::ShowRawPostView { post_uri, raw_json } => {
+                self.opened_raw_views.insert(post_uri, raw_json);
+            }
+            RedskyUiMsg::CloseRawPostView { post_uri } => {
+                self.opened_raw_views.remove(&post_uri);
             }
             RedskyUiMsg::NotifyLikesLoaded { post_uri, likers } => {
                 self.post_likers_cache.insert(post_uri, likers);

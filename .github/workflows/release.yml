@@ -20,7 +20,7 @@ jobs:
       repository-projects: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install system dependencies
       if: runner.os == 'Linux'
@@ -81,13 +81,13 @@ jobs:
 
     - name: Upload Release Asset (Linux and Windows)
       if: runner.os != 'macOS'
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         files: target/release/redsky-${{ runner.os }}.zip
 
     - name: Upload Release Asset (macOS)
       if: runner.os == 'macOS'
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         files: |
           redsky.dmg
