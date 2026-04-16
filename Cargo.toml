@@ -31,3 +31,6 @@ opt-level = "z"
 
 [build-dependencies]
 winres = "0.1.12"
+
+[features]
+mock-api = []

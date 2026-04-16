@@ -259,7 +259,11 @@ impl BskyJob {
         self.ctx.request_repaint();
     }
 }
+
+#[cfg(not(feature = "mock-api"))]
 include!("actor_methods.rs");
+#[cfg(feature = "mock-api")]
+include!("actor_methods_mock.rs");
 
 #[cfg(test)]
 mod tests {
