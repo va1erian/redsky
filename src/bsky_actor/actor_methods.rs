@@ -745,6 +745,7 @@ impl BskyJob {
         &self,
         msg: &String,
         image_paths: &Vec<String>,
+        reply_to: &Option<(StrongRef, StrongRef)>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("post");
 
@@ -767,6 +768,22 @@ impl BskyJob {
             }
         }
 
+        let reply = if let Some((root_ref, parent_ref)) = reply_to {
+            let root = atrium_api::com::atproto::repo::strong_ref::MainData {
+                cid: root_ref.cid.clone(),
+                uri: root_ref.uri.clone(),
+            }
+            .into();
+            let parent = atrium_api::com::atproto::repo::strong_ref::MainData {
+                cid: parent_ref.cid.clone(),
+                uri: parent_ref.uri.clone(),
+            }
+            .into();
+            Some(atrium_api::app::bsky::feed::post::ReplyRefData { root, parent }.into())
+        } else {
+            None
+        };
+
         let _ = self
             .bsky_agent
             .create_record(atrium_api::app::bsky::feed::post::RecordData {
@@ -776,7 +793,7 @@ impl BskyJob {
                 facets: None,
                 labels: None,
                 langs: None,
-                reply: None,
+                reply,
                 tags: None,
                 text: msg.to_string(),
             })

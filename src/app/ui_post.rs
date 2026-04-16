@@ -192,6 +192,16 @@ impl RedskyApp {
                                             );
                                         });
 
+                                        if ui.button("Reply").clicked() {
+                                            self.is_post_window_open = true;
+                                            let parent_ref = StrongRef {
+                                                uri: post.uri.clone(),
+                                                cid: post.cid.clone(),
+                                            };
+                                            let root_ref = post.thread_root.clone().unwrap_or(parent_ref.clone());
+                                            self.reply_to = Some((root_ref, parent_ref));
+                                        }
+
                                         let _ = ui.button("…");
                                     });
                                     ui.separator();

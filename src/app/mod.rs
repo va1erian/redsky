@@ -54,6 +54,7 @@ pub struct RedskyApp {
     pub settings: AppSettings,
     pub is_settings_window_open: bool,
     new_post_images: Vec<String>,
+    reply_to: Option<(StrongRef, StrongRef)>,
 }
 impl RedskyApp {
     pub fn new(
@@ -122,6 +123,7 @@ impl RedskyApp {
             settings: AppSettings::load(),
             is_settings_window_open: false,
             new_post_images: Vec::new(),
+            reply_to: None,
         }
     }
 }
@@ -291,6 +293,7 @@ impl eframe::App for RedskyApp {
                     ui.menu_button("File", |ui| {
                         if ui.button("New post...").clicked() {
                             self.is_post_window_open = true;
+                            self.reply_to = None;
                         }
                         if ui.button("Search accounts...").clicked() {
                             self.is_search_window_open = true;
