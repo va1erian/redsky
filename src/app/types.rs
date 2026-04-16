@@ -30,6 +30,7 @@ pub struct Post {
     pub is_reply: bool,
     pub viewer_like: Option<String>,
     pub viewer_repost: Option<String>,
+    pub thread_root: Option<StrongRef>,
     pub raw_json: String,
 }
 pub enum FeedItem {
@@ -206,6 +207,11 @@ pub enum RedskyUiMsg {
     ShowSearchResults {
         results: Vec<UserProfile>,
     },
+    ShowSearchPostsResults {
+        posts: Vec<Post>,
+        cursor: Option<String>,
+        append: bool,
+    },
     NotifyUnreadCount {
         count: i64,
     },
@@ -222,6 +228,7 @@ pub enum BskyActorMsg {
     Post {
         msg_body: String,
         image_paths: Vec<String>,
+        reply_to: Option<(StrongRef, StrongRef)>,
     },
     GetTimeline {
         cursor: Option<String>,
@@ -267,6 +274,10 @@ pub enum BskyActorMsg {
     },
     SearchActors {
         query: String,
+    },
+    SearchPosts {
+        query: String,
+        cursor: Option<String>,
     },
     LoadImage {
         url: String,

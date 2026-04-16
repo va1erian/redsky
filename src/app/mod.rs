@@ -7,6 +7,10 @@ use std::hash::Hash;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 include!("types.rs");
+
+const KEYRING_SERVICE: &str = "redsky";
+const KEYRING_USER: &str = "credentials";
+
 pub struct RedskyApp {
     tx: Sender<BskyActorMsg>,
     ui_tx: Sender<RedskyUiMsg>,
@@ -41,12 +45,17 @@ pub struct RedskyApp {
     is_search_window_open: bool,
     search_query: String,
     search_results: Vec<UserProfile>,
+    is_search_posts_window_open: bool,
+    search_posts_query: String,
+    search_posts_results: Option<Vec<FeedItem>>,
+    search_posts_cursor: Option<String>,
     unread_notifications: i64,
     notifications: Vec<AppNotification>,
     remember_me: bool,
     pub settings: AppSettings,
     pub is_settings_window_open: bool,
     new_post_images: Vec<String>,
+    reply_to: Option<(StrongRef, StrongRef)>,
 }
 impl RedskyApp {
     pub fn new(
@@ -58,7 +67,7 @@ impl RedskyApp {
         let mut pass = String::new();
         let mut remember_me = false;
 
-        if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
             if let Ok(cred) = entry.get_password() {
                 if let Some((l, p)) = cred.split_once(':') {
                     login = l.to_string();
@@ -107,11 +116,16 @@ impl RedskyApp {
             is_search_window_open: false,
             search_query: String::new(),
             search_results: Vec::new(),
+            is_search_posts_window_open: false,
+            search_posts_query: String::new(),
+            search_posts_results: None,
+            search_posts_cursor: None,
             unread_notifications: 0,
             notifications: Vec::new(),
             settings: AppSettings::load(),
             is_settings_window_open: false,
             new_post_images: Vec::new(),
+            reply_to: None,
         }
     }
 }
@@ -249,6 +263,9 @@ impl eframe::App for RedskyApp {
         if self.is_search_window_open {
             self.make_search_window(ctx);
         }
+        if self.is_search_posts_window_open {
+            self.make_search_posts_window(ctx);
+        }
         if self.is_settings_window_open {
             self.make_settings_window(ctx);
         }
@@ -272,9 +289,13 @@ impl eframe::App for RedskyApp {
                     ui.menu_button("File", |ui| {
                         if ui.button("New post...").clicked() {
                             self.is_post_window_open = true;
+                            self.reply_to = None;
                         }
                         if ui.button("Search accounts...").clicked() {
                             self.is_search_window_open = true;
+                        }
+                        if ui.button("Search posts...").clicked() {
+                            self.is_search_posts_window_open = true;
                         }
                         if ui.button("Settings...").clicked() {
                             self.is_settings_window_open = true;

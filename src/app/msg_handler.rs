@@ -202,11 +202,11 @@ impl RedskyApp {
                 self.is_logged_in = true;
 
                 if self.remember_me {
-                    if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+                    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
                         let _ = entry.set_password(&format!("{}:{}", self.login, self.pass));
                     }
                 } else {
-                    if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+                    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
                         let _ = entry.delete_credential();
                     }
                 }
@@ -291,6 +291,18 @@ impl RedskyApp {
                     self.request_image(&profile.avatar_uri);
                 }
                 self.search_results = results;
+            }
+            RedskyUiMsg::ShowSearchPostsResults { posts, cursor, append } => {
+                self.request_post_images(&posts);
+                let new_items = crate::app::into_feed_items(posts);
+                if append {
+                    if let Some(existing_posts) = self.search_posts_results.as_mut() {
+                        existing_posts.extend(new_items);
+                    }
+                } else {
+                    self.search_posts_results = Some(new_items);
+                }
+                self.search_posts_cursor = cursor;
             }
         }
     }

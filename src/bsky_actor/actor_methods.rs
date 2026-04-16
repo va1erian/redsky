@@ -325,6 +325,49 @@ impl BskyJob {
         })
     }
 
+    async fn search_posts(
+        &self,
+        query: &String,
+        cursor: &Option<String>,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        dbg!("search posts", &query);
+        let response = self
+            .bsky_agent
+            .api
+            .app
+            .bsky
+            .feed
+            .search_posts(
+                atrium_api::app::bsky::feed::search_posts::ParametersData {
+                    q: query.clone(),
+                    limit: 30.try_into().ok(),
+                    cursor: cursor.clone(),
+                    author: None,
+                    domain: None,
+                    lang: None,
+                    mentions: None,
+                    since: None,
+                    sort: None,
+                    tag: None,
+                    until: None,
+                    url: None,
+                }
+                .into(),
+            )
+            .await?;
+
+        Ok(RedskyUiMsg::ShowSearchPostsResults {
+            posts: response
+                .data
+                .posts
+                .iter()
+                .filter_map(|post_view| extract_post(post_view))
+                .collect(),
+            cursor: response.data.cursor,
+            append: cursor.is_some(),
+        })
+    }
+
     async fn search_actors(
         &self,
         query: &String,
@@ -731,6 +774,7 @@ impl BskyJob {
         &self,
         msg: &String,
         image_paths: &Vec<String>,
+        reply_to: &Option<(StrongRef, StrongRef)>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("post");
 
@@ -753,6 +797,22 @@ impl BskyJob {
             }
         }
 
+        let reply = if let Some((root_ref, parent_ref)) = reply_to {
+            let root = atrium_api::com::atproto::repo::strong_ref::MainData {
+                cid: root_ref.cid.clone(),
+                uri: root_ref.uri.clone(),
+            }
+            .into();
+            let parent = atrium_api::com::atproto::repo::strong_ref::MainData {
+                cid: parent_ref.cid.clone(),
+                uri: parent_ref.uri.clone(),
+            }
+            .into();
+            Some(atrium_api::app::bsky::feed::post::ReplyRefData { root, parent }.into())
+        } else {
+            None
+        };
+
         let _ = self
             .bsky_agent
             .create_record(atrium_api::app::bsky::feed::post::RecordData {
@@ -762,7 +822,7 @@ impl BskyJob {
                 facets: None,
                 labels: None,
                 langs: None,
-                reply: None,
+                reply,
                 tags: None,
                 text: msg.to_string(),
             })

@@ -192,6 +192,16 @@ impl RedskyApp {
                                             );
                                         });
 
+                                        if ui.button("Reply").clicked() {
+                                            self.is_post_window_open = true;
+                                            let parent_ref = StrongRef {
+                                                uri: post.uri.clone(),
+                                                cid: post.cid.clone(),
+                                            };
+                                            let root_ref = post.thread_root.clone().unwrap_or(parent_ref.clone());
+                                            self.reply_to = Some((root_ref, parent_ref));
+                                        }
+
                                         ui.menu_button("…", |ui| {
                                             if ui.add_enabled(
                                                 post.author == self.login,
@@ -260,6 +270,14 @@ impl RedskyApp {
                             cursor: Some(cursor),
                         });
                         self.timeline_cursor = None; // Avoid duplicate requests
+                    }
+                } else if username == "Search Results" {
+                    if let Some(cursor) = self.search_posts_cursor.clone() {
+                        self.post_message(BskyActorMsg::SearchPosts {
+                            query: self.search_posts_query.clone(),
+                            cursor: Some(cursor),
+                        });
+                        self.search_posts_cursor = None; // Avoid duplicate requests
                     }
                 } else if username != "Thread" {
                     if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
