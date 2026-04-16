@@ -709,7 +709,7 @@ impl BskyJob {
         if !image_paths.is_empty() {
             let mut images = Vec::new();
             for path in image_paths {
-                if let Ok(file_bytes) = std::fs::read(path) {
+                if let Ok(file_bytes) = tokio::fs::read(path).await {
                     let blob_output = self.bsky_agent.api.com.atproto.repo.upload_blob(file_bytes).await?;
                     images.push(atrium_api::app::bsky::embed::images::ImageData {
                         alt: String::new(),
