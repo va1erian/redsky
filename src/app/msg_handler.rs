@@ -193,11 +193,11 @@ impl RedskyApp {
                 self.is_logged_in = true;
 
                 if self.remember_me {
-                    if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+                    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
                         let _ = entry.set_password(&format!("{}:{}", self.login, self.pass));
                     }
                 } else {
-                    if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+                    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
                         let _ = entry.delete_credential();
                     }
                 }

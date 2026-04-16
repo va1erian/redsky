@@ -7,6 +7,10 @@ use std::hash::Hash;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 include!("types.rs");
+
+const KEYRING_SERVICE: &str = "redsky";
+const KEYRING_USER: &str = "credentials";
+
 pub struct RedskyApp {
     tx: Sender<BskyActorMsg>,
     ui_tx: Sender<RedskyUiMsg>,
@@ -57,7 +61,7 @@ impl RedskyApp {
         let mut pass = String::new();
         let mut remember_me = false;
 
-        if let Ok(entry) = keyring::Entry::new("redsky", "credentials") {
+        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER) {
             if let Ok(cred) = entry.get_password() {
                 if let Some((l, p)) = cred.split_once(':') {
                     login = l.to_string();
