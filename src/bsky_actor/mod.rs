@@ -127,6 +127,7 @@ fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
                 is_reply: quote_post_data.reply.is_some(),
                 viewer_like: None,
                 viewer_repost: None,
+                thread_root: None,
             })
         } else {
             None
@@ -181,6 +182,12 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
         is_reply: post_record_data.reply.is_some(),
         viewer_like: post_view.viewer.as_ref().and_then(|v| v.like.clone()),
         viewer_repost: post_view.viewer.as_ref().and_then(|v| v.repost.clone()),
+        thread_root: post_record_data.reply.and_then(|reply| {
+            Some(StrongRef {
+                uri: reply.root.uri.clone(),
+                cid: reply.root.cid.clone(),
+            })
+        }),
     })
 }
 fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
@@ -196,7 +203,7 @@ impl BskyJob {
     pub async fn perform(self) -> () {
         let result = match &self.job {
             BskyActorMsg::Login { login, pass } => self.login(login, pass).await,
-            BskyActorMsg::Post { msg_body, image_paths } => self.post(msg_body, image_paths).await,
+            BskyActorMsg::Post { msg_body, image_paths, reply_to } => self.post(msg_body, image_paths, reply_to).await,
             BskyActorMsg::GetPostAndReplies { post_ref } => self.get_post_thread(post_ref).await,
             BskyActorMsg::GetPostLikers { post_ref } => self.get_post_likers(post_ref).await,
             BskyActorMsg::GetPostRepostedBy { post_ref } => {

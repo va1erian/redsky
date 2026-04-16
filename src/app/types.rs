@@ -30,6 +30,7 @@ pub struct Post {
     pub is_reply: bool,
     pub viewer_like: Option<String>,
     pub viewer_repost: Option<String>,
+    pub thread_root: Option<StrongRef>,
 }
 pub enum FeedItem {
     Full(Post),
@@ -210,6 +211,7 @@ pub enum BskyActorMsg {
     Post {
         msg_body: String,
         image_paths: Vec<String>,
+        reply_to: Option<(StrongRef, StrongRef)>,
     },
     GetTimeline {
         cursor: Option<String>,

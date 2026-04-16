@@ -202,7 +202,11 @@ impl RedskyApp {
             |ui, _| {
                 egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.vertical(|ui| {
-                        ui.heading("New post");
+                        if self.reply_to.is_some() {
+                            ui.heading("Replying to...");
+                        } else {
+                            ui.heading("New post");
+                        }
 
                         ui.text_edit_multiline(&mut self.msg);
 
@@ -230,9 +234,12 @@ impl RedskyApp {
                                 self.post_message(BskyActorMsg::Post {
                                     msg_body: self.msg.clone(),
                                     image_paths: self.new_post_images.clone(),
+                                    reply_to: self.reply_to.clone(),
                                 });
                                 self.msg.clear();
                                 self.new_post_images.clear();
+                                self.reply_to = None;
+                                self.is_post_window_open = false;
                             }
                         });
                     });
@@ -240,6 +247,7 @@ impl RedskyApp {
 
                 if ui.ctx().input(|i| i.viewport().close_requested()) {
                     self.is_post_window_open = false;
+                    self.reply_to = None;
                 }
             },
         );
