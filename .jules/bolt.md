@@ -1,3 +1,3 @@
-## 2026-04-16 - Replaced Map Double-Lookups with Single Matches
-**Learning:** Found an anti-pattern in the UI rendering loop where 'contains_key' followed by 'get().unwrap()' (a double hash lookup) caused excessive HashMap overhead.
-**Action:** Replaced these cases across 'ui_post.rs', 'ui_widgets.rs', and 'ui_user.rs' with 'if let Some' or 'match' expressions. NLL ensures this is lifetime-safe even when a 'None' branch needs mutable borrowing afterwards.
+## 2024-05-18 - [Performance] Defer pretty-printing of raw JSON to UI on demand
+**Learning:** In an immediate mode GUI framework like egui, putting expensive operations like `serde_json::from_str` or `to_string_pretty` inside the render loop causes catastrophic performance issues because it runs every frame. The initial attempt to fix a performance issue by offloading work to the UI layer resulted in a major regression.
+**Action:** When shifting work from the background data processing layer (e.g., parsing feed posts) to the UI layer, always ensure the expensive work is done exactly once in the event/message handler and the result is cached in the application state. Never do the parsing/formatting directly inside the egui `show` closure.

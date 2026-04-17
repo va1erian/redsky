@@ -88,7 +88,12 @@ impl RedskyApp {
                 self.post_message(BskyActorMsg::DeletePost { post_uri, post_cid });
             }
             RedskyUiMsg::ShowRawPostView { post_uri, raw_json } => {
-                self.opened_raw_views.insert(post_uri, raw_json);
+                let formatted_json = if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw_json) {
+                    serde_json::to_string_pretty(&parsed).unwrap_or(raw_json)
+                } else {
+                    raw_json
+                };
+                self.opened_raw_views.insert(post_uri, formatted_json);
             }
             RedskyUiMsg::CloseRawPostView { post_uri } => {
                 self.opened_raw_views.remove(&post_uri);
