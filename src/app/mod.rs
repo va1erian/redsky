@@ -384,9 +384,10 @@ impl eframe::App for RedskyApp {
             }
         }
 
-        for ev in ctx.input(|i| i.events.clone()) {
-            if let egui::Event::Screenshot { image, .. } = ev {
-                if let Some(state) = self.screenshot_state {
+        if let Some(state) = self.screenshot_state {
+            let vid = state.viewport_id().unwrap_or(ctx.viewport_id());
+            for ev in ctx.input_for(vid, |i| i.events.clone()) {
+                if let egui::Event::Screenshot { image, .. } = ev {
                     let pixels: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
                     let output_path = state.filename();
                     image::save_buffer(
