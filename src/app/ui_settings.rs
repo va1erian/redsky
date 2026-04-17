@@ -44,6 +44,12 @@ impl RedskyApp {
                             }
                         });
 
+                        ui.horizontal(|ui| {
+                            if ui.checkbox(&mut self.settings.allow_dehydration, "Enable post dehydration").changed() {
+                                settings_changed = true;
+                            }
+                        });
+
                         if settings_changed {
                             self.settings.save();
 

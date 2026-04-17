@@ -102,7 +102,7 @@ impl RedskyApp {
                 ui.vertical(|ui| {
                     for (idx, item) in posts.iter_mut().enumerate() {
                         match item {
-                            FeedItem::Full(post) => {
+                            FeedItem::Full(post, ref mut height) => {
                                 let post_block = ui.vertical(|ui| {
                                     if idx == 0 && self.scroll_to_top {
                                         ui.scroll_to_rect(ui.max_rect(), Some(egui::Align::TOP));
@@ -158,7 +158,7 @@ impl RedskyApp {
                                                 ui,
                                                 "Show Likers",
                                                 post,
-                                                |post_ref| BskyActorMsg::GetPostLikers { post_ref },
+                                                |post_ref| BskyActorMsg::GetPostLikers { post_ref, cursor: None },
                                             );
                                         });
 
@@ -186,6 +186,7 @@ impl RedskyApp {
                                                 "Show Reposters",
                                                 post,
                                                 |post_ref| BskyActorMsg::GetPostRepostedBy {
+                                                    cursor: None,
                                                     post_ref,
                                                 },
                                             );
@@ -232,26 +233,33 @@ impl RedskyApp {
                                         },
                                     });
                                 }
+                                *height = Some(post_block.response.rect.height());
                             }
-                            FeedItem::Dehydrated { uri: _ } => {
-                                ui.vertical_centered(|ui| {
-                                    ui.add_space(50.0);
-                                    ui.spinner();
-                                    ui.add_space(50.0);
+                            FeedItem::Dehydrated { uri: _, height } => {
+                                let h = height.unwrap_or(100.0);
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(ui.available_width(), h),
+                                    egui::Sense::hover(),
+                                );
+                                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                                    ui.centered_and_justified(|ui| {
+                                        ui.spinner();
+                                    });
                                 });
                             }
                         }
 
                         // Rehydration check
                         let mut rehydrate_uri = None;
-                        if let FeedItem::Dehydrated { uri } = item {
-                            if ui.is_rect_visible(ui.available_rect_before_wrap()) {
+                        if let FeedItem::Dehydrated { uri, height: _ } = item {
+                            let visible = ui.is_rect_visible(ui.cursor());
+                            if visible {
                                 rehydrate_uri = Some(uri.clone());
                             }
                         }
                         if let Some(uri) = rehydrate_uri {
                             if let Some(post) = self.post_cache.remove(&uri) {
-                                *item = FeedItem::Full(post);
+                                *item = FeedItem::Full(post, None);
                                 self.post_cache_order.retain(|u| u != &uri);
                             }
                         }
@@ -261,30 +269,53 @@ impl RedskyApp {
             scroll_offset_y = scroll_output.state.offset.y;
             content_size_y = scroll_output.content_size.y;
 
-            // Infinite Scroll Check
-            if scroll_offset_y > content_size_y * 0.8 && content_size_y > 0.0 {
-                if username == "Your timeline" {
-                    if let Some(cursor) = self.timeline_cursor.clone() {
+            // Infinite Scroll Check replaced by Load More buttons
+            if username == "Your timeline" {
+                if let Some(cursor) = self.timeline_cursor.clone() {
+                    if ui.button("Load More").clicked() {
                         self.post_message(BskyActorMsg::GetTimeline {
                             cursor: Some(cursor),
                         });
                         self.timeline_cursor = None; // Avoid duplicate requests
                     }
-                } else if username == "Search Results" {
-                    if let Some(cursor) = self.search_posts_cursor.clone() {
+                }
+            } else if username == "Search Results" {
+                if let Some(cursor) = self.search_posts_cursor.clone() {
+                    if ui.button("Load More").clicked() {
                         self.post_message(BskyActorMsg::SearchPosts {
                             query: self.search_posts_query.clone(),
                             cursor: Some(cursor),
                         });
                         self.search_posts_cursor = None; // Avoid duplicate requests
                     }
-                } else if username != "Thread" {
-                    if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
+                }
+            } else if username == "Your bookmarks" {
+                if let Some(cursor) = self.bookmarks_cursor.clone() {
+                    if ui.button("Load More").clicked() {
+                        self.post_message(BskyActorMsg::GetBookmarks {
+                            cursor: Some(cursor),
+                        });
+                        self.bookmarks_cursor = None; // Avoid duplicate requests
+                    }
+                }
+            } else if username != "Thread" {
+                // It's a user view
+                if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
+                    if ui.button("Load More (Posts)").clicked() {
                         self.post_message(BskyActorMsg::GetUserPosts {
                             username: username.to_string(),
                             cursor: Some(cursor),
                         });
                         self.user_cursors.insert(username.to_string(), None); // Avoid duplicate requests
+                    }
+                }
+                if let Some(cursor) = self.user_likes_cursors.get(username).cloned().flatten() {
+                    if ui.button("Load More (Likes)").clicked() {
+                        self.post_message(BskyActorMsg::GetUserLikes {
+                            username: username.to_string(),
+                            cursor: Some(cursor),
+                        });
+                        self.user_likes_cursors.insert(username.to_string(), None); // Avoid duplicate requests
                     }
                 }
             }
@@ -295,31 +326,33 @@ impl RedskyApp {
         }
 
         // Dehydration logic
-        let visible_idx = (scroll_offset_y / 200.0) as i32;
-        for (idx, item) in posts.iter_mut().enumerate() {
-            let mut should_dehydrate = false;
-            if let FeedItem::Full(_) = item {
-                if (idx as i32 - visible_idx).abs() > 50 {
-                    should_dehydrate = true;
+        if self.settings.allow_dehydration {
+            let visible_idx = (scroll_offset_y / 200.0) as i32;
+            for (idx, item) in posts.iter_mut().enumerate() {
+                let mut should_dehydrate = false;
+                if let FeedItem::Full(_, _) = item {
+                    if (idx as i32 - visible_idx).abs() > 50 {
+                        should_dehydrate = true;
+                    }
                 }
-            }
 
-            if should_dehydrate {
-                if let FeedItem::Full(post) =
-                    std::mem::replace(item, FeedItem::Dehydrated { uri: String::new() })
-                {
-                    let uri = post.uri.clone();
-                    if !uri.is_empty() {
-                        self.post_cache.insert(uri.clone(), post);
-                        self.post_cache_order.push_back(uri.clone());
+                if should_dehydrate {
+                    if let FeedItem::Full(post, height) =
+                        std::mem::replace(item, FeedItem::Dehydrated { uri: String::new(), height: None })
+                    {
+                        let uri = post.uri.clone();
+                        if !uri.is_empty() {
+                            self.post_cache.insert(uri.clone(), post);
+                            self.post_cache_order.push_back(uri.clone());
 
-                        // LRU Eviction
-                        if self.post_cache.len() > 200 {
-                            if let Some(oldest_uri) = self.post_cache_order.pop_front() {
-                                self.post_cache.remove(&oldest_uri);
+                            // LRU Eviction
+                            if self.post_cache.len() > 200 {
+                                if let Some(oldest_uri) = self.post_cache_order.pop_front() {
+                                    self.post_cache.remove(&oldest_uri);
+                                }
                             }
+                            *item = FeedItem::Dehydrated { uri, height };
                         }
-                        *item = FeedItem::Dehydrated { uri };
                     }
                 }
             }

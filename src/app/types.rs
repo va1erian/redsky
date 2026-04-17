@@ -35,12 +35,12 @@ pub struct Post {
     pub raw_json: String,
 }
 pub enum FeedItem {
-    Full(Post),
-    Dehydrated { uri: String },
+    Full(Post, Option<f32>),
+    Dehydrated { uri: String, height: Option<f32> },
 }
 
 pub fn into_feed_items(posts: impl IntoIterator<Item = Post>) -> Vec<FeedItem> {
-    posts.into_iter().map(FeedItem::Full).collect()
+    posts.into_iter().map(|p| FeedItem::Full(p, None)).collect()
 }
 
 #[derive(Debug)]
@@ -93,6 +93,8 @@ pub enum RedskyUiMsg {
     ActionSucceeded(),
     RefreshBookmarksMsg {
         posts: Vec<Post>,
+        cursor: Option<String>,
+        append: bool,
     },
     PrepareUserView {
         username: String,
@@ -111,10 +113,14 @@ pub enum RedskyUiMsg {
     NotifyLikesLoaded {
         post_uri: StrongRef,
         likers: Vec<UserProfile>,
+        cursor: Option<String>,
+        append: bool,
     },
     NotifyRepostersLoaded {
         post_uri: StrongRef,
         reposters: Vec<UserProfile>,
+        cursor: Option<String>,
+        append: bool,
     },
     CloseLikesView {
         post_uri: StrongRef,
@@ -221,6 +227,8 @@ pub enum RedskyUiMsg {
     },
     RefreshNotificationsMsg {
         notifications: Vec<AppNotification>,
+        cursor: Option<String>,
+        append: bool,
     },
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -237,7 +245,7 @@ pub enum BskyActorMsg {
     GetTimeline {
         cursor: Option<String>,
     },
-    GetBookmarks(),
+    GetBookmarks { cursor: Option<String> },
     Like {
         post_ref: StrongRef,
     },
@@ -258,9 +266,11 @@ pub enum BskyActorMsg {
     },
     GetPostLikers {
         post_ref: StrongRef,
+        cursor: Option<String>,
     },
     GetPostRepostedBy {
         post_ref: StrongRef,
+        cursor: Option<String>,
     },
     GetPostAndReplies {
         post_ref: StrongRef,
@@ -295,7 +305,7 @@ pub enum BskyActorMsg {
         id: u64,
     },
     GetUnreadCount(),
-    GetNotifications(),
+    GetNotifications { cursor: Option<String> },
     #[allow(dead_code)]
     Close(),
 }
@@ -325,6 +335,7 @@ pub struct AppSettings {
     pub theme: AppTheme,
     pub max_image_size: f32,
     pub zoom_factor: f32,
+    pub allow_dehydration: bool,
 }
 
 impl Default for AppSettings {
@@ -333,6 +344,7 @@ impl Default for AppSettings {
             theme: AppTheme::System,
             max_image_size: 640.0,
             zoom_factor: 1.0,
+            allow_dehydration: true,
         }
     }
 }

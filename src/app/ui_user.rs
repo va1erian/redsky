@@ -144,20 +144,18 @@ impl RedskyApp {
                 for item in posts.iter_mut() {
                     // Rehydration check (MUST happen before matching if we need data)
                     let mut rehydrate_uri = None;
-                    if let FeedItem::Dehydrated { uri } = item {
-                        // Dehydrated items will just trigger rehydration immediately in Media View
-                        // as we don't do complex virtualization here anymore
+                    if let FeedItem::Dehydrated { uri, height: _ } = item {
                         rehydrate_uri = Some(uri.clone());
                     }
                     if let Some(uri) = rehydrate_uri {
                         if let Some(post) = self.post_cache.remove(&uri) {
-                            *item = FeedItem::Full(post);
+                            *item = FeedItem::Full(post, None);
                             self.post_cache_order.retain(|u| u != &uri);
                         }
                     }
 
                     match item {
-                        FeedItem::Full(post) => {
+                        FeedItem::Full(post, _) => {
                             for embed in &post.embeds {
                                 match self.image_cache.get(&embed.thumbnail_url) {
                                     Some(Some(texture)) => {
@@ -180,44 +178,47 @@ impl RedskyApp {
                                 }
                             }
                         }
-                        FeedItem::Dehydrated { uri: _ } => {}
+                        FeedItem::Dehydrated { uri: _, height: _ } => {}
                     }
                 }
             });
         });
 
-        let scroll_offset_y = scroll_output.state.offset.y;
-        let content_size_y = scroll_output.content_size.y;
+        let _scroll_offset_y = scroll_output.state.offset.y;
+        let _content_size_y = scroll_output.content_size.y;
 
-        // Infinite Scroll Check
-        let viewport_height = ui.available_height();
-        if (scroll_offset_y + viewport_height) > content_size_y * 0.8 && content_size_y > 0.0 {
-            if username == "Your timeline" {
-                if let Some(cursor) = self.timeline_cursor.clone() {
+        // Infinite Scroll Check replaced by Load More
+        if username == "Your timeline" {
+            if let Some(cursor) = self.timeline_cursor.clone() {
+                if ui.button("Load More").clicked() {
                     self.post_message(BskyActorMsg::GetTimeline {
                         cursor: Some(cursor),
                     });
-                    self.timeline_cursor = None; // Avoid duplicate requests
+                    self.timeline_cursor = None;
                 }
-            } else if username != "Thread" {
-                let current_view = self.user_view_states.get(username).cloned().unwrap_or(UserViewState::Posts);
-                match current_view {
-                    UserViewState::Posts | UserViewState::Media => {
-                        if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
+            }
+        } else if username != "Thread" {
+            let current_view = self.user_view_states.get(username).cloned().unwrap_or(UserViewState::Posts);
+            match current_view {
+                UserViewState::Posts | UserViewState::Media => {
+                    if let Some(cursor) = self.user_cursors.get(username).cloned().flatten() {
+                        if ui.button("Load More").clicked() {
                             self.post_message(BskyActorMsg::GetUserPosts {
                                 username: username.to_string(),
                                 cursor: Some(cursor),
                             });
-                            self.user_cursors.insert(username.to_string(), None); // Avoid duplicate requests
+                            self.user_cursors.insert(username.to_string(), None);
                         }
                     }
-                    UserViewState::Liked => {
-                        if let Some(cursor) = self.user_likes_cursors.get(username).cloned().flatten() {
+                }
+                UserViewState::Liked => {
+                    if let Some(cursor) = self.user_likes_cursors.get(username).cloned().flatten() {
+                        if ui.button("Load More").clicked() {
                             self.post_message(BskyActorMsg::GetUserLikes {
                                 username: username.to_string(),
                                 cursor: Some(cursor),
                             });
-                            self.user_likes_cursors.insert(username.to_string(), None); // Avoid duplicate requests
+                            self.user_likes_cursors.insert(username.to_string(), None);
                         }
                     }
                 }

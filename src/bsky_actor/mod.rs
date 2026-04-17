@@ -216,9 +216,9 @@ impl BskyJob {
             BskyActorMsg::Login { login, pass } => self.login(login, pass).await,
             BskyActorMsg::Post { msg_body, image_paths, reply_to } => self.post(msg_body, image_paths, reply_to).await,
             BskyActorMsg::GetPostAndReplies { post_ref } => self.get_post_thread(post_ref).await,
-            BskyActorMsg::GetPostLikers { post_ref } => self.get_post_likers(post_ref).await,
-            BskyActorMsg::GetPostRepostedBy { post_ref } => {
-                self.get_post_reposted_by(post_ref).await
+            BskyActorMsg::GetPostLikers { post_ref, cursor } => self.get_post_likers(post_ref, cursor).await,
+            BskyActorMsg::GetPostRepostedBy { post_ref, cursor } => {
+                self.get_post_reposted_by(post_ref, cursor).await
             }
             BskyActorMsg::Like { post_ref } => self.like(post_ref.clone()).await,
             BskyActorMsg::Unlike {
@@ -235,7 +235,7 @@ impl BskyJob {
                     .await
             }
             BskyActorMsg::GetTimeline { cursor } => self.get_timeline_posts(cursor).await,
-            BskyActorMsg::GetBookmarks() => self.get_bookmarks().await,
+            BskyActorMsg::GetBookmarks { cursor } => self.get_bookmarks(cursor).await,
             BskyActorMsg::GetUserProfile { username } => self.get_user_profile(username).await,
             BskyActorMsg::GetUserPosts { username, cursor } => {
                 self.get_user_posts(username, cursor).await
@@ -253,7 +253,7 @@ impl BskyJob {
                 Ok(RedskyUiMsg::LogInSucceededMsg()) // dummy
             }
             BskyActorMsg::GetUnreadCount() => self.get_unread_count().await,
-            BskyActorMsg::GetNotifications() => self.get_notifications().await,
+            BskyActorMsg::GetNotifications { cursor } => self.get_notifications(cursor).await,
             BskyActorMsg::Close() => {
                 panic!("unexpected message");
             }
