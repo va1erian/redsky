@@ -241,7 +241,7 @@ impl RedskyApp {
                                     egui::vec2(ui.available_width(), h),
                                     egui::Sense::hover(),
                                 );
-                                ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect), |ui| {
+                                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
                                     ui.centered_and_justified(|ui| {
                                         ui.spinner();
                                     });

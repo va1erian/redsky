@@ -199,7 +199,11 @@ impl BskyJob {
     }
 
     async fn get_bookmarks(&self, _cursor: &Option<String>) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(RedskyUiMsg::RefreshBookmarksMsg { posts: vec![] })
+        Ok(RedskyUiMsg::RefreshBookmarksMsg {
+            posts: vec![],
+            cursor: None,
+            append: false,
+        })
     }
 
     async fn login(
@@ -229,7 +233,11 @@ impl BskyJob {
         &self,
         _cursor: &Option<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(RedskyUiMsg::RefreshNotificationsMsg { notifications: vec![] })
+        Ok(RedskyUiMsg::RefreshNotificationsMsg {
+            notifications: vec![],
+            cursor: None,
+            append: false,
+        })
     }
 
     async fn load_image(
