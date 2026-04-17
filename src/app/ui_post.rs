@@ -98,8 +98,7 @@ impl RedskyApp {
         let mut content_size_y = 0.0;
 
         ui.vertical_centered_justified(|ui| {
-            let scroll_area = egui::ScrollArea::vertical();
-            let scroll_output = scroll_area.show(ui, |ui| {
+            let scroll_output = crate::app::show_autoscroll_area(ui, "post_scroll", false, |ui| {
                 ui.vertical(|ui| {
                     for (idx, item) in posts.iter_mut().enumerate() {
                         match item {

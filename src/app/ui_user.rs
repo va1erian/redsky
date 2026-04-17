@@ -139,8 +139,7 @@ impl RedskyApp {
 
 
 
-        let scroll_area = egui::ScrollArea::vertical();
-        let scroll_output = scroll_area.show(ui, |ui| {
+        let scroll_output = crate::app::show_autoscroll_area(ui, format!("{}_media_scroll", username), false, |ui| {
             ui.horizontal_wrapped(|ui| {
                 for item in posts.iter_mut() {
                     // Rehydration check (MUST happen before matching if we need data)
