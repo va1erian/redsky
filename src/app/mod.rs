@@ -350,21 +350,28 @@ impl eframe::App for RedskyApp {
                             ui.vertical_centered_justified(|ui| {
                                 ui.heading("Welcome to Redsky");
                                 ui.separator();
+                                let mut enter_pressed = false;
                                 ui.horizontal(|ui| {
                                     let name_label = ui.label("bsky handle: ");
-                                    ui.text_edit_singleline(&mut self.login)
+                                    let resp = ui.text_edit_singleline(&mut self.login)
                                         .labelled_by(name_label.id);
+                                    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                        enter_pressed = true;
+                                    }
                                 });
                                 ui.horizontal(|ui| {
                                     let pwd_label = ui.label("password: ");
-                                    ui.add(
+                                    let resp = ui.add(
                                         egui::TextEdit::singleline(&mut self.pass).password(true),
                                     )
                                     .labelled_by(pwd_label.id);
+                                    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                        enter_pressed = true;
+                                    }
                                 });
                                 ui.checkbox(&mut self.remember_me, "Remember me");
                                 ui.horizontal(|ui| {
-                                    if ui.button("login").clicked() {
+                                    if ui.button("login").clicked() || enter_pressed {
                                         self.post_message(BskyActorMsg::Login {
                                             login: self.login.to_string(),
                                             pass: self.pass.to_string(),

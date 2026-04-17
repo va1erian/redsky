@@ -237,11 +237,13 @@ impl RedskyApp {
                             ui.heading("New post");
                         }
 
-                        ui.text_edit_multiline(&mut self.msg);
+                        ui.add(egui::TextEdit::multiline(&mut self.msg).hint_text("What's on your mind?"));
 
                         if !self.new_post_images.is_empty() {
                             ui.label(format!("{} image(s) selected", self.new_post_images.len()));
                         }
+
+                        let cmd_enter = ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
 
                         ui.horizontal(|ui| {
                             if ui.button("Add Image").clicked() {
@@ -259,7 +261,7 @@ impl RedskyApp {
                                 }
                             }
 
-                            if ui.button("send").clicked() {
+                            if ui.button("send").on_hover_text("Send (Cmd/Ctrl+Enter)").clicked() || cmd_enter {
                                 self.post_message(BskyActorMsg::Post {
                                     msg_body: self.msg.clone(),
                                     image_paths: self.new_post_images.clone(),
