@@ -127,7 +127,7 @@ fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
                 viewer_like: None,
                 viewer_repost: None,
                 thread_root: None,
-                raw_json: serde_json::to_string_pretty(&view_record).unwrap_or_default(),
+                raw_json: serde_json::to_string(&view_record).unwrap_or_default(),
             })
         } else {
             None
@@ -188,7 +188,7 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
                 cid: reply.root.cid.clone(),
             })
         }),
-        raw_json: serde_json::to_string_pretty(&post_view).unwrap_or_default(),
+        raw_json: serde_json::to_string(&post_view).unwrap_or_default(),
     })
 }
 fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
