@@ -7,6 +7,7 @@ use std::hash::Hash;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 include!("types.rs");
+include!("screenshot_state.rs");
 
 const KEYRING_SERVICE: &str = "redsky";
 const KEYRING_USER: &str = "credentials";
@@ -57,8 +58,10 @@ pub struct RedskyApp {
     new_post_images: Vec<String>,
     reply_to: Option<(StrongRef, StrongRef)>,
     screenshot_requested: bool,
+    #[allow(dead_code)]
     screenshot_output_path: Option<String>,
     frames_rendered: usize,
+    screenshot_state: Option<ScreenshotState>,
 }
 impl RedskyApp {
     pub fn new(
@@ -91,11 +94,13 @@ impl RedskyApp {
         let mut timeline = Vec::new();
         let mut main_view_state = MainViewState::Login;
         let mut is_logged_in = false;
-        let mut opened_image_views = HashSet::new();
+        #[allow(unused_mut, unused_variables)]
+        let mut opened_image_views: HashSet<String> = HashSet::new();
+        let mut screenshot_state = None;
 
         if is_screenshot_mode {
             is_logged_in = true;
-            opened_image_views.insert("mock-image-url".to_string());
+            screenshot_state = Some(ScreenshotState::Timeline);
             main_view_state = MainViewState::TimelineFeed;
             timeline.push(FeedItem::Full(Post {
                 uri: "at://mock-uri".to_string(),
@@ -184,6 +189,7 @@ impl RedskyApp {
             screenshot_requested: is_screenshot_mode,
             screenshot_output_path,
             frames_rendered: 0,
+            screenshot_state,
         }
     }
 }
@@ -308,26 +314,71 @@ impl eframe::App for RedskyApp {
         let ctx = ui.ctx();
 
         self.frames_rendered += 1;
-        if self.screenshot_requested && self.frames_rendered > 5 {
-            self.screenshot_requested = false;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
-        }
-        if self.screenshot_requested {
-            ctx.request_repaint();
+
+        if let Some(state) = self.screenshot_state {
+            match state {
+                ScreenshotState::Timeline => {
+                    self.main_view_state = MainViewState::TimelineFeed;
+                    self.is_settings_window_open = false;
+                    self.is_post_window_open = false;
+                }
+                ScreenshotState::Profile => {
+                    self.main_view_state = MainViewState::OwnPostFeed;
+                }
+                ScreenshotState::Bookmarks => {
+                    self.main_view_state = MainViewState::BookmarksFeed;
+                }
+                ScreenshotState::Notifications => {
+                    self.main_view_state = MainViewState::NotificationsFeed;
+                }
+                ScreenshotState::Thread => {
+                    self.main_view_state = MainViewState::TimelineFeed;
+                    self.post_replies_cache.insert(
+                        StrongRef { uri: "at://mock-uri".to_string(), cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap() },
+                        Some(vec![]),
+                    );
+                }
+                ScreenshotState::Settings => {
+                    self.post_replies_cache.clear();
+                    self.is_settings_window_open = true;
+                }
+                ScreenshotState::NewPost => {
+                    self.is_settings_window_open = false;
+                    self.is_post_window_open = true;
+                }
+                ScreenshotState::Done => {
+                    std::process::exit(0);
+                }
+            }
+
+            if self.screenshot_requested && self.frames_rendered > 10 {
+                self.screenshot_requested = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+            }
+
+            if self.screenshot_requested {
+                ctx.request_repaint();
+            }
         }
 
         for ev in ctx.input(|i| i.events.clone()) {
             if let egui::Event::Screenshot { image, .. } = ev {
-                let pixels: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
-                let output_path = self.screenshot_output_path.as_deref().unwrap_or("screenshot.png");
-                image::save_buffer(
-                    output_path,
-                    &pixels,
-                    image.size[0] as u32,
-                    image.size[1] as u32,
-                    image::ColorType::Rgba8,
-                ).expect("Failed to save screenshot");
-                std::process::exit(0);
+                if let Some(state) = self.screenshot_state {
+                    let pixels: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+                    let output_path = state.filename();
+                    image::save_buffer(
+                        output_path,
+                        &pixels,
+                        image.size[0] as u32,
+                        image.size[1] as u32,
+                        image::ColorType::Rgba8,
+                    ).expect("Failed to save screenshot");
+
+                    self.screenshot_state = Some(state.next());
+                    self.screenshot_requested = true;
+                    self.frames_rendered = 0;
+                    ctx.request_repaint();
+                }
             }
         }
 

@@ -300,7 +300,7 @@ pub enum BskyActorMsg {
     Close(),
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
-enum MainViewState {
+pub enum MainViewState {
     Login,
     TimelineFeed,
     OwnPostFeed,
