@@ -36,4 +36,13 @@ impl ScreenshotState {
             Self::Done => "done.png",
         }
     }
+
+    pub fn viewport_id(&self) -> Option<egui::ViewportId> {
+        match self {
+            Self::Thread => Some(egui::ViewportId::from_hash_of("at://mock-uri")),
+            Self::Settings => Some(egui::ViewportId::from_hash_of("__settings")),
+            Self::NewPost => Some(egui::ViewportId::from_hash_of("__new_post")),
+            _ => None, // Use root viewport for timeline, profile, bookmarks, notifications
+        }
+    }
 }

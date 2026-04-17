@@ -316,44 +316,67 @@ impl eframe::App for RedskyApp {
         self.frames_rendered += 1;
 
         if let Some(state) = self.screenshot_state {
-            match state {
-                ScreenshotState::Timeline => {
-                    self.main_view_state = MainViewState::TimelineFeed;
-                    self.is_settings_window_open = false;
-                    self.is_post_window_open = false;
-                }
-                ScreenshotState::Profile => {
-                    self.main_view_state = MainViewState::OwnPostFeed;
-                }
-                ScreenshotState::Bookmarks => {
-                    self.main_view_state = MainViewState::BookmarksFeed;
-                }
-                ScreenshotState::Notifications => {
-                    self.main_view_state = MainViewState::NotificationsFeed;
-                }
-                ScreenshotState::Thread => {
-                    self.main_view_state = MainViewState::TimelineFeed;
-                    self.post_replies_cache.insert(
-                        StrongRef { uri: "at://mock-uri".to_string(), cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap() },
-                        Some(vec![]),
-                    );
-                }
-                ScreenshotState::Settings => {
-                    self.post_replies_cache.clear();
-                    self.is_settings_window_open = true;
-                }
-                ScreenshotState::NewPost => {
-                    self.is_settings_window_open = false;
-                    self.is_post_window_open = true;
-                }
-                ScreenshotState::Done => {
-                    std::process::exit(0);
+            if self.frames_rendered == 1 {
+                match state {
+                    ScreenshotState::Timeline => {
+                        self.main_view_state = MainViewState::TimelineFeed;
+                        self.is_settings_window_open = false;
+                        self.is_post_window_open = false;
+                    }
+                    ScreenshotState::Profile => {
+                        self.main_view_state = MainViewState::OwnPostFeed;
+                    }
+                    ScreenshotState::Bookmarks => {
+                        self.main_view_state = MainViewState::BookmarksFeed;
+                    }
+                    ScreenshotState::Notifications => {
+                        self.main_view_state = MainViewState::NotificationsFeed;
+                    }
+                    ScreenshotState::Thread => {
+                        self.main_view_state = MainViewState::TimelineFeed;
+                        self.post_replies_cache.insert(
+                            StrongRef { uri: "at://mock-uri".to_string(), cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap() },
+                            Some(vec![FeedItem::Full(Post {
+                                uri: "at://mock-reply-uri".to_string(),
+                                cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap(),
+                                content: "Mock post thread reply content".to_string(),
+                                author: "mockauthor2.bsky.social".to_string(),
+                                display_name: "Mock Author 2".to_string(),
+                                avatar_img: "".to_string(),
+                                date: "2024-01-01T00:01:00Z".to_string(),
+                                like_count: 1,
+                                repost_count: 0,
+                                embeds: vec![],
+                                quoted_post: None,
+                                is_reply: true,
+                                viewer_like: None,
+                                viewer_repost: None,
+                                thread_root: Some(StrongRef { uri: "at://mock-uri".to_string(), cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap() }),
+                                raw_json: "{}".to_string(),
+                            })]),
+                        );
+                    }
+                    ScreenshotState::Settings => {
+                        self.post_replies_cache.clear();
+                        self.is_settings_window_open = true;
+                    }
+                    ScreenshotState::NewPost => {
+                        self.is_settings_window_open = false;
+                        self.is_post_window_open = true;
+                    }
+                    ScreenshotState::Done => {
+                        std::process::exit(0);
+                    }
                 }
             }
 
             if self.screenshot_requested && self.frames_rendered > 10 {
                 self.screenshot_requested = false;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                if let Some(vid) = state.viewport_id() {
+                    ctx.send_viewport_cmd_to(vid, egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                } else {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                }
             }
 
             if self.screenshot_requested {
