@@ -18,12 +18,18 @@ impl RedskyApp {
                 }
                 self.timeline_cursor = cursor;
             }
-            RedskyUiMsg::RefreshBookmarksMsg { posts } => {
+            RedskyUiMsg::RefreshBookmarksMsg { posts, cursor, append } => {
                 self.request_post_images(&posts);
-                self.bookmarks = posts;
+                if append {
+                    self.bookmarks.extend(posts);
+                } else {
+                    self.bookmarks = posts;
+                }
+                self.bookmarks_cursor = cursor;
             }
             RedskyUiMsg::PrepareUserView { username } => {
                 self.user_posts.insert(username.clone(), None);
+                self.user_likes_posts.insert(username.clone(), None);
                 self.post_message(BskyActorMsg::GetUserProfile { username });
             }
             RedskyUiMsg::PrepareImageView { img_uri } => {
@@ -98,14 +104,30 @@ impl RedskyApp {
             RedskyUiMsg::CloseRawPostView { post_uri } => {
                 self.opened_raw_views.remove(&post_uri);
             }
-            RedskyUiMsg::NotifyLikesLoaded { post_uri, likers } => {
-                self.post_likers_cache.insert(post_uri, likers);
+            RedskyUiMsg::NotifyLikesLoaded { post_uri, likers, cursor, append } => {
+                if append {
+                    if let Some((existing, existing_cursor)) = self.post_likers_cache.get_mut(&post_uri) {
+                        existing.extend(likers);
+                        *existing_cursor = cursor;
+                    }
+                } else {
+                    self.post_likers_cache.insert(post_uri, (likers, cursor));
+                }
             }
             RedskyUiMsg::NotifyRepostersLoaded {
                 post_uri,
                 reposters,
+                cursor,
+                append,
             } => {
-                self.post_reposters_cache.insert(post_uri, reposters);
+                if append {
+                    if let Some((existing, existing_cursor)) = self.post_reposters_cache.get_mut(&post_uri) {
+                        existing.extend(reposters);
+                        *existing_cursor = cursor;
+                    }
+                } else {
+                    self.post_reposters_cache.insert(post_uri, (reposters, cursor));
+                }
             }
             RedskyUiMsg::CloseLikesView { post_uri } => {
                 self.post_likers_cache.remove(&post_uri);
@@ -199,8 +221,8 @@ impl RedskyApp {
                 };
                 self.request_post_images(&replies);
                 self.request_post_images(&vec![post.clone()]);
-                let mut items = vec![FeedItem::Full(post)];
-                items.extend(replies.into_iter().map(FeedItem::Full));
+                let mut items = vec![FeedItem::Full(post, None)];
+                items.extend(replies.into_iter().map(|p| FeedItem::Full(p, None)));
                 self.post_replies_cache.insert(strong_ref, Some(items));
             }
             RedskyUiMsg::LogInSucceededMsg() => {
@@ -225,18 +247,23 @@ impl RedskyApp {
                     username: self.login.clone(),
                 });
                 self.post_message(BskyActorMsg::GetTimeline { cursor: None });
-                self.post_message(BskyActorMsg::GetBookmarks());
+                self.post_message(BskyActorMsg::GetBookmarks { cursor: None });
                 self.post_message(BskyActorMsg::GetUnreadCount());
-                self.post_message(BskyActorMsg::GetNotifications());
+                self.post_message(BskyActorMsg::GetNotifications { cursor: None });
             }
             RedskyUiMsg::NotifyUnreadCount { count } => {
                 self.unread_notifications = count;
             }
-            RedskyUiMsg::RefreshNotificationsMsg { notifications } => {
+            RedskyUiMsg::RefreshNotificationsMsg { notifications, cursor, append } => {
                 for notif in &notifications {
                     self.request_image(&notif.author_avatar);
                 }
-                self.notifications = notifications;
+                if append {
+                    self.notifications.extend(notifications);
+                } else {
+                    self.notifications = notifications;
+                }
+                self.notifications_cursor = cursor;
             }
             RedskyUiMsg::NotifyImageLoaded { url, data } => {
                 let texture = ctx.load_texture(&url, data, Default::default());

@@ -1,0 +1,17 @@
+python3 patch_types.py
+python3 patch_actor.py
+python3 patch_mock.py
+python3 patch_bskymod.py
+python3 patch_msg_handler.py
+python3 patch_notifs_cursors.py
+python3 patch_notifs_ui.py
+python3 patch_likers_cache.py
+python3 patch_widgets_cursor.py
+python3 patch_types2.py
+python3 patch_settings.py
+python3 patch_handlers.py
+python3 patch_ui_post_final.py
+python3 patch_brace.py
+python3 patch_brace2.py
+python3 patch_brace3.py
+python3 patch_brace4.py

@@ -101,8 +101,8 @@ pub struct RedskyApp {
     scroll_to_top: bool,
     user_infos_cache: HashMap<String, UserProfile>,
     image_cache: HashMap<String, Option<egui::TextureHandle>>,
-    post_likers_cache: HashMap<StrongRef, Vec<UserProfile>>,
-    post_reposters_cache: HashMap<StrongRef, Vec<UserProfile>>,
+    post_likers_cache: HashMap<StrongRef, (Vec<UserProfile>, Option<String>)>,
+    post_reposters_cache: HashMap<StrongRef, (Vec<UserProfile>, Option<String>)>,
     post_replies_cache: HashMap<StrongRef, Option<Vec<FeedItem>>>,
     opened_image_views: HashSet<String>,
     opened_raw_views: HashMap<String, String>, // uri -> raw_json
@@ -118,6 +118,8 @@ pub struct RedskyApp {
     unread_notifications: i64,
     notifications: Vec<AppNotification>,
     remember_me: bool,
+    pub notifications_cursor: Option<String>,
+    pub bookmarks_cursor: Option<String>,
     pub settings: AppSettings,
     pub is_settings_window_open: bool,
     new_post_images: Vec<String>,
@@ -181,7 +183,7 @@ impl RedskyApp {
                 viewer_repost: None,
                 thread_root: None,
                 raw_json: "{}".to_string(),
-            }));
+            }, None));
             timeline.push(FeedItem::Full(Post {
                 uri: "at://mock-uri-2".to_string(),
                 cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap(),
@@ -199,7 +201,7 @@ impl RedskyApp {
                 viewer_repost: None,
                 thread_root: None,
                 raw_json: "{}".to_string(),
-            }));
+            }, None));
             let _ = tx.send(BskyActorMsg::GetUnreadCount());
         }
 
@@ -244,6 +246,8 @@ impl RedskyApp {
             search_posts_cursor: None,
             unread_notifications: 0,
             notifications: Vec::new(),
+            notifications_cursor: None,
+            bookmarks_cursor: None,
             settings: AppSettings::load(),
             is_settings_window_open: false,
             new_post_images: Vec::new(),
@@ -290,7 +294,7 @@ impl RedskyApp {
     {
         // Update timeline
         for item in &mut self.timeline {
-            if let FeedItem::Full(post) = item {
+            if let FeedItem::Full(post, _) = item {
                 if post.uri == post_uri {
                     update_fn(post);
                 }
@@ -304,7 +308,7 @@ impl RedskyApp {
         // Update user posts
         for posts in self.user_posts.values_mut().flatten() {
             for item in posts {
-                if let FeedItem::Full(post) = item {
+                if let FeedItem::Full(post, _) = item {
                     if post.uri == post_uri {
                         update_fn(post);
                     }
@@ -319,7 +323,7 @@ impl RedskyApp {
         // Update user likes posts
         for posts in self.user_likes_posts.values_mut().flatten() {
             for item in posts {
-                if let FeedItem::Full(post) = item {
+                if let FeedItem::Full(post, _) = item {
                     if post.uri == post_uri {
                         update_fn(post);
                     }
@@ -334,7 +338,7 @@ impl RedskyApp {
         // Update replies cache
         for posts in self.post_replies_cache.values_mut().flatten() {
             for item in posts {
-                if let FeedItem::Full(post) = item {
+                if let FeedItem::Full(post, _) = item {
                     if post.uri == post_uri {
                         update_fn(post);
                     }
@@ -613,7 +617,13 @@ impl eframe::App for RedskyApp {
                                         }
                                     });
                                     if ui.button("Refresh notifications").clicked() {
-                                        self.post_message(BskyActorMsg::GetNotifications());
+                                        self.post_message(BskyActorMsg::GetNotifications { cursor: None });
+                                    }
+                                    if let Some(cursor) = self.notifications_cursor.clone() {
+                                        if ui.button("Load More").clicked() {
+                                            self.post_message(BskyActorMsg::GetNotifications { cursor: Some(cursor) });
+                                            self.notifications_cursor = None;
+                                        }
                                     }
                                 });
                             },

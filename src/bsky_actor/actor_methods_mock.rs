@@ -2,6 +2,7 @@ impl BskyJob {
     async fn get_post_likers(
         &self,
         strong_ref: &StrongRef,
+        _cursor: &Option<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         let likers = vec![UserProfile {
             handle: "testliker.bsky.social".to_string(),
@@ -15,12 +16,15 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyLikesLoaded {
             post_uri: strong_ref.clone(),
             likers,
+            cursor: None,
+            append: false,
         })
     }
 
     async fn get_post_reposted_by(
         &self,
         strong_ref: &StrongRef,
+        _cursor: &Option<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         let reposters = vec![UserProfile {
             handle: "testreposter.bsky.social".to_string(),
@@ -34,6 +38,8 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyRepostersLoaded {
             post_uri: strong_ref.clone(),
             reposters,
+            cursor: None,
+            append: false,
         })
     }
 
@@ -192,7 +198,7 @@ impl BskyJob {
         })
     }
 
-    async fn get_bookmarks(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_bookmarks(&self, _cursor: &Option<String>) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         Ok(RedskyUiMsg::RefreshBookmarksMsg { posts: vec![] })
     }
 
@@ -221,6 +227,7 @@ impl BskyJob {
 
     async fn get_notifications(
         &self,
+        _cursor: &Option<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         Ok(RedskyUiMsg::RefreshNotificationsMsg { notifications: vec![] })
     }

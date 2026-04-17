@@ -4,6 +4,7 @@ impl BskyJob {
     async fn get_post_likers(
         &self,
         strong_ref: &StrongRef,
+        cursor: &Option<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get likers");
 
@@ -17,7 +18,7 @@ impl BskyJob {
                 atrium_api::app::bsky::feed::get_likes::ParametersData {
                     cid: Some(strong_ref.cid.clone()),
                     uri: strong_ref.uri.clone(),
-                    cursor: None,
+                    cursor: cursor.clone(),
                     limit: None,
                 }
                 .into(),
@@ -51,12 +52,15 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyLikesLoaded {
             post_uri: strong_ref.clone(),
             likers,
+            cursor: response.data.cursor,
+            append: cursor.is_some(),
         })
     }
 
     async fn get_post_reposted_by(
         &self,
         strong_ref: &StrongRef,
+        cursor: &Option<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get reposters");
 
@@ -70,7 +74,7 @@ impl BskyJob {
                 atrium_api::app::bsky::feed::get_reposted_by::ParametersData {
                     cid: Some(strong_ref.cid.clone()),
                     uri: strong_ref.uri.clone(),
-                    cursor: None,
+                    cursor: cursor.clone(),
                     limit: None,
                 }
                 .into(),
@@ -101,6 +105,8 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyRepostersLoaded {
             post_uri: strong_ref.clone(),
             reposters,
+            cursor: response.data.cursor,
+            append: cursor.is_some(),
         })
     }
 
@@ -577,7 +583,7 @@ impl BskyJob {
         })
     }
 
-    async fn get_bookmarks(&self) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_bookmarks(&self, cursor: &Option<String>) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         dbg!("get bookmarks");
 
         let response = self
@@ -602,6 +608,8 @@ impl BskyJob {
                 .iter()
                 .flat_map(extract_post_from_bookmark)
                 .collect(),
+            cursor: response.data.cursor,
+            append: cursor.is_some(),
         })
     }
 
@@ -854,6 +862,7 @@ impl BskyJob {
 
     async fn get_notifications(
         &self,
+        cursor: &Option<String>,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         let response = self
             .bsky_agent
@@ -886,6 +895,10 @@ impl BskyJob {
             })
             .collect();
 
-        Ok(RedskyUiMsg::RefreshNotificationsMsg { notifications })
+        Ok(RedskyUiMsg::RefreshNotificationsMsg {
+            notifications,
+            cursor: response.data.cursor,
+            append: cursor.is_some(),
+        })
     }
 }
