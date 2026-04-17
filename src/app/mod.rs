@@ -5,6 +5,72 @@ use egui_extras::{Size, StripBuilder};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::sync::mpsc::Receiver;
+
+pub fn show_autoscroll_area<R>(
+    ui: &mut egui::Ui,
+    id_source: impl std::hash::Hash,
+    both_directions: bool,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::scroll_area::ScrollAreaOutput<R> {
+    let id = egui::Id::new(id_source).with("autoscroll");
+    let mut origin = ui.data_mut(|d| d.get_temp::<Option<egui::Pos2>>(id).unwrap_or(None));
+
+    let scroll_area = if both_directions {
+        egui::ScrollArea::both()
+    } else {
+        egui::ScrollArea::vertical()
+    };
+
+    let output = scroll_area.show(ui, |ui| {
+        if let Some(o) = origin {
+            if let Some(pos) = ui.input(|i| i.pointer.latest_pos()) {
+                let dy = pos.y - o.y;
+                let dx = pos.x - o.x;
+                let scroll_dy = if dy.abs() > 10.0 { -dy * 0.1 } else { 0.0 };
+                let scroll_dx = if both_directions && dx.abs() > 10.0 { -dx * 0.1 } else { 0.0 };
+                if scroll_dy != 0.0 || scroll_dx != 0.0 {
+                    ui.scroll_with_delta(egui::vec2(scroll_dx, scroll_dy));
+                    ui.ctx().request_repaint();
+                }
+            }
+        }
+        add_contents(ui)
+    });
+
+    let rect = output.inner_rect;
+    let pointer_pos = ui.input(|i| i.pointer.interact_pos());
+
+    if ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Middle)) {
+        if let Some(pos) = pointer_pos {
+            if rect.contains(pos) {
+                if origin.is_none() {
+                    origin = Some(pos);
+                } else {
+                    origin = None;
+                }
+            }
+        }
+    }
+
+    if origin.is_some() {
+        if ui.input(|i| {
+            i.pointer.button_pressed(egui::PointerButton::Primary)
+                || i.pointer.button_pressed(egui::PointerButton::Secondary)
+        }) {
+            origin = None;
+        }
+    }
+
+    if let Some(o) = origin {
+         let painter = ui.ctx().debug_painter();
+         painter.circle_filled(o, 4.0, egui::Color32::from_black_alpha(128));
+         painter.circle_stroke(o, 6.0, egui::Stroke::new(1.0, egui::Color32::from_white_alpha(128)));
+         ui.ctx().set_cursor_icon(egui::CursorIcon::AllScroll);
+    }
+
+    ui.data_mut(|d| d.insert_temp(id, origin));
+    output
+}
 use std::sync::mpsc::Sender;
 include!("types.rs");
 
@@ -416,7 +482,7 @@ impl eframe::App for RedskyApp {
                             egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),
                             |ui| {
                                 ui.vertical(|ui| {
-                                    egui::ScrollArea::vertical().show(ui, |ui| {
+                                    crate::app::show_autoscroll_area(ui, "notifications_scroll", false, |ui| {
                                         for notif in &self.notifications {
                                             ui.horizontal(|ui| {
                                                 if !notif.author_avatar.is_empty() {

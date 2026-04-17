@@ -10,7 +10,7 @@ impl RedskyApp {
                     .with_inner_size([300.0, 400.0]),
                 |ui, _| {
                     egui::CentralPanel::default().show_inside(ui, |ui| {
-                        egui::ScrollArea::vertical().show(ui, |ui| {
+                        crate::app::show_autoscroll_area(ui, "likers_scroll", false, |ui| {
                             for user in likers {
                                 self.make_maybe_user_profile_view(ui, &user.handle, Some(user));
                                 ui.separator();
@@ -33,7 +33,7 @@ impl RedskyApp {
                     .with_inner_size([300.0, 400.0]),
                 |ui, _| {
                     egui::CentralPanel::default().show_inside(ui, |ui| {
-                        egui::ScrollArea::vertical().show(ui, |ui| {
+                        crate::app::show_autoscroll_area(ui, "reposters_scroll", false, |ui| {
                             for user in reposters {
                                 self.make_maybe_user_profile_view(ui, &user.handle, Some(user));
                                 ui.separator();
@@ -106,7 +106,7 @@ impl RedskyApp {
                             if !task.errors.is_empty() {
                                 ui.separator();
                                 ui.label("Errors:");
-                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                crate::app::show_autoscroll_area(ui, "download_errors_scroll", false, |ui| {
                                     for error in &task.errors {
                                         ui.colored_label(egui::Color32::RED, error);
                                     }
@@ -167,7 +167,7 @@ impl RedskyApp {
                         views_to_close.push(uri.clone());
                     }
                     egui::CentralPanel::default().show_inside(ctx, |ui| {
-                        egui::ScrollArea::both().show(ui, |ui| {
+                        crate::app::show_autoscroll_area(ui, "raw_scroll", true, |ui| {
                             let mut text = raw_json.clone();
                             ui.add(
                                 egui::TextEdit::multiline(&mut text)
@@ -192,7 +192,7 @@ impl RedskyApp {
                     .with_inner_size([800.0, 600.0]),
                 |ui, _| {
                     egui::CentralPanel::default().show_inside(ui, |ui| {
-                        egui::ScrollArea::both().show(ui, |ui| {
+                        crate::app::show_autoscroll_area(ui, "img_scroll", true, |ui| {
                             ui.centered_and_justified(|ui| {
                                 if let Some(img_data) = self.image_cache.get(img) {
                                     self.make_buffer_image_view(
@@ -304,7 +304,7 @@ impl RedskyApp {
                         ui.separator();
 
                         let mut clicked_profile = None;
-                        egui::ScrollArea::vertical().show(ui, |ui| {
+                        crate::app::show_autoscroll_area(ui, "search_results_scroll", false, |ui| {
                             for profile in &self.search_results {
                                 let (rect, response) = ui.allocate_at_least(
                                     vec2(ui.available_width(), 57.6),
