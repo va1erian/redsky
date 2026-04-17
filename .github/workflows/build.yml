@@ -27,5 +27,13 @@ jobs:
     - name: Build
       run: cargo build --verbose
 
+    - name: Compress executable
+      uses: crazy-max/ghaction-upx@v3
+      with:
+        files: |
+          target/debug/redsky
+          target/debug/redsky.exe
+        args: -q
+
     - name: Run tests
       run: cargo test --verbose

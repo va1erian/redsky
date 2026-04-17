@@ -34,6 +34,14 @@ jobs:
     - name: Build
       run: cargo build --release
 
+    - name: Compress executable
+      uses: crazy-max/ghaction-upx@v3
+      with:
+        files: |
+          target/release/redsky
+          target/release/redsky.exe
+        args: -q
+
     - name: Zip executable (Linux)
       if: runner.os == 'Linux'
       run: |
