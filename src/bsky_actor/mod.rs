@@ -37,7 +37,7 @@ pub struct BskyActor {
 struct BskyJob {
     job: BskyActorMsg,
     tx: Sender<RedskyUiMsg>,
-    #[allow(dead_code)]
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
     bsky_agent: BskyAgent,
     ctx: egui::Context, //for force repaint
 }
@@ -106,7 +106,7 @@ impl BskyActor {
         }
     }
 }
-#[allow(dead_code)]
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
     if let Some(Union::Refs(PostViewEmbedRefs::AppBskyEmbedRecordView(embedded_record))) =
         &post_view.embed
@@ -143,7 +143,7 @@ fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
         None
     }
 }
-#[allow(dead_code)]
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_images(post_view: &Object<PostViewData>) -> Vec<PostImage> {
     post_view
         .embed
@@ -170,7 +170,7 @@ fn extract_images(post_view: &Object<PostViewData>) -> Vec<PostImage> {
         .flatten()
         .collect()
 }
-#[allow(dead_code)]
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
     let post_record_data =
         post::RecordData::try_from_unknown(post_view.data.record.clone()).ok()?;
@@ -200,7 +200,7 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
         raw_json: serde_json::to_string_pretty(&post_view).unwrap_or_default(),
     })
 }
-#[allow(dead_code)]
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
     match &bookmark.item {
         Union::Refs(BookmarkViewItemRefs::AppBskyFeedDefsPostView(post)) => {

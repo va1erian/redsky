@@ -57,7 +57,7 @@ pub struct RedskyApp {
     new_post_images: Vec<String>,
     reply_to: Option<(StrongRef, StrongRef)>,
     screenshot_requested: bool,
-    #[allow(dead_code)]
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
     screenshot_output_path: Option<String>,
     frames_rendered: usize,
 }
