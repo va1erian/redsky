@@ -1,4 +1,5 @@
 use crate::app::BskyActorMsg;
+#[cfg(not(feature = "mock-api"))]
 use crate::app::DownloadStatus;
 use crate::app::Post;
 use crate::app::PostImage;
@@ -10,10 +11,14 @@ use atrium_api::app::bsky::bookmark::defs::BookmarkViewItemRefs;
 use atrium_api::app::bsky::embed::record::ViewRecordRefs;
 use atrium_api::app::bsky::feed::defs::PostViewData;
 use atrium_api::app::bsky::feed::defs::PostViewEmbedRefs;
+#[cfg(not(feature = "mock-api"))]
 use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
+#[cfg(not(feature = "mock-api"))]
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
-use atrium_api::types::string::{AtIdentifier, Datetime, RecordKey, Cid};
+#[cfg(not(feature = "mock-api"))]
+use atrium_api::types::string::{AtIdentifier, Datetime, RecordKey};
+use atrium_api::types::string::Cid;
 use atrium_api::types::Object;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
@@ -32,6 +37,7 @@ pub struct BskyActor {
 struct BskyJob {
     job: BskyActorMsg,
     tx: Sender<RedskyUiMsg>,
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
     bsky_agent: BskyAgent,
     ctx: egui::Context, //for force repaint
 }
@@ -100,6 +106,7 @@ impl BskyActor {
         }
     }
 }
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
     if let Some(Union::Refs(PostViewEmbedRefs::AppBskyEmbedRecordView(embedded_record))) =
         &post_view.embed
@@ -136,6 +143,7 @@ fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
         None
     }
 }
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_images(post_view: &Object<PostViewData>) -> Vec<PostImage> {
     post_view
         .embed
@@ -162,6 +170,7 @@ fn extract_images(post_view: &Object<PostViewData>) -> Vec<PostImage> {
         .flatten()
         .collect()
 }
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
     let post_record_data =
         post::RecordData::try_from_unknown(post_view.data.record.clone()).ok()?;
@@ -191,6 +200,7 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
         raw_json: serde_json::to_string(&post_view).unwrap_or_default(),
     })
 }
+#[cfg_attr(feature = "mock-api", allow(dead_code))]
 fn extract_post_from_bookmark(bookmark: &Object<BookmarkViewData>) -> Option<Post> {
     match &bookmark.item {
         Union::Refs(BookmarkViewItemRefs::AppBskyFeedDefsPostView(post)) => {
@@ -261,7 +271,11 @@ impl BskyJob {
         self.ctx.request_repaint();
     }
 }
+
+#[cfg(not(feature = "mock-api"))]
 include!("actor_methods.rs");
+#[cfg(feature = "mock-api")]
+include!("actor_methods_mock.rs");
 
 #[cfg(test)]
 mod tests {

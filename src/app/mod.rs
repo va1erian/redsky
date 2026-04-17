@@ -122,12 +122,18 @@ pub struct RedskyApp {
     pub is_settings_window_open: bool,
     new_post_images: Vec<String>,
     reply_to: Option<(StrongRef, StrongRef)>,
+    screenshot_requested: bool,
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
+    screenshot_output_path: Option<String>,
+    frames_rendered: usize,
 }
 impl RedskyApp {
     pub fn new(
         tx: Sender<BskyActorMsg>,
         ui_tx: Sender<RedskyUiMsg>,
         rx: Receiver<RedskyUiMsg>,
+        is_screenshot_mode: bool,
+        screenshot_output_path: Option<String>,
     ) -> Self {
         let mut login = String::new();
         let mut pass = String::new();
@@ -139,26 +145,76 @@ impl RedskyApp {
                     login = l.to_string();
                     pass = p.to_string();
                     remember_me = true;
-                    let _ = tx.send(BskyActorMsg::Login {
-                        login: login.clone(),
-                        pass: pass.clone(),
-                    });
+                    if !is_screenshot_mode {
+                        let _ = tx.send(BskyActorMsg::Login {
+                            login: login.clone(),
+                            pass: pass.clone(),
+                        });
+                    }
                 }
             }
+        }
+
+        let mut timeline = Vec::new();
+        let mut main_view_state = MainViewState::Login;
+        let mut is_logged_in = false;
+        #[allow(unused_mut, unused_variables)]
+        let mut opened_image_views: HashSet<String> = HashSet::new();
+
+        if is_screenshot_mode {
+            is_logged_in = true;
+            main_view_state = MainViewState::TimelineFeed;
+            timeline.push(FeedItem::Full(Post {
+                uri: "at://mock-uri".to_string(),
+                cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap(),
+                content: "Hello, world! This is a mock post for the screenshot test.".to_string(),
+                author: "mockuser.bsky.social".to_string(),
+                display_name: "Mock User".to_string(),
+                avatar_img: "".to_string(),
+                date: "2024-01-01T00:00:00Z".to_string(),
+                like_count: 42,
+                repost_count: 7,
+                embeds: vec![],
+                quoted_post: None,
+                is_reply: false,
+                viewer_like: None,
+                viewer_repost: None,
+                thread_root: None,
+                raw_json: "{}".to_string(),
+            }));
+            timeline.push(FeedItem::Full(Post {
+                uri: "at://mock-uri-2".to_string(),
+                cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap(),
+                content: "Another mock post right here.".to_string(),
+                author: "anotheruser.bsky.social".to_string(),
+                display_name: "Another User".to_string(),
+                avatar_img: "".to_string(),
+                date: "2024-01-01T00:05:00Z".to_string(),
+                like_count: 100,
+                repost_count: 20,
+                embeds: vec![],
+                quoted_post: None,
+                is_reply: false,
+                viewer_like: None,
+                viewer_repost: None,
+                thread_root: None,
+                raw_json: "{}".to_string(),
+            }));
+            let _ = tx.send(BskyActorMsg::GetUnreadCount());
         }
 
         Self {
             tx,
             ui_tx,
             rx,
-            is_logged_in: false,
+            is_logged_in,
             is_post_window_open: false,
-            main_view_state: MainViewState::Login,
+            main_view_state,
             login,
             pass,
             remember_me,
             msg: String::new(),
-            timeline: Vec::new(),
+            timeline,
             bookmarks: Vec::new(),
             user_posts: HashMap::new(),
             user_likes_posts: HashMap::new(),
@@ -179,7 +235,7 @@ impl RedskyApp {
             opened_raw_views: HashMap::new(),
             download_tasks: HashMap::new(),
             next_download_id: 0,
-            is_search_window_open: false,
+            is_search_window_open: is_screenshot_mode,
             search_query: String::new(),
             search_results: Vec::new(),
             is_search_posts_window_open: false,
@@ -192,6 +248,9 @@ impl RedskyApp {
             is_settings_window_open: false,
             new_post_images: Vec::new(),
             reply_to: None,
+            screenshot_requested: is_screenshot_mode,
+            screenshot_output_path,
+            frames_rendered: 0,
         }
     }
 }
@@ -314,6 +373,33 @@ impl RedskyApp {
 impl eframe::App for RedskyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx();
+
+        self.frames_rendered += 1;
+
+        if self.screenshot_requested && self.frames_rendered > 5 {
+            self.screenshot_requested = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+        }
+        if self.screenshot_requested {
+            ctx.request_repaint();
+        }
+
+        for ev in ctx.input(|i| i.events.clone()) {
+            if let egui::Event::Screenshot { image, .. } = ev {
+                let pixels: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+                let output_path = self.screenshot_output_path.as_deref().unwrap_or("screenshot.png");
+                image::save_buffer(
+                    output_path,
+                    &pixels,
+                    image.size[0] as u32,
+                    image.size[1] as u32,
+                    image::ColorType::Rgba8,
+                ).expect("Failed to save screenshot");
+
+                std::process::exit(0);
+            }
+        }
+
         ctx.set_pixels_per_point(self.settings.zoom_factor);
         while let Ok(msg) = self.rx.try_recv() {
             self.process_message(ctx, msg);

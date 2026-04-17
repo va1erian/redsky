@@ -28,6 +28,17 @@ fn load_icon() -> egui::IconData {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut is_screenshot_mode = false;
+    let mut screenshot_output_path = None;
+
+    for arg in std::env::args() {
+        if arg == "--test-screenshot" {
+            is_screenshot_mode = true;
+        } else if arg.starts_with("--test-screenshot-output=") {
+            screenshot_output_path = Some(arg.trim_start_matches("--test-screenshot-output=").to_string());
+        }
+    }
+
     let mut options = eframe::NativeOptions::default();
     options.viewport = egui::ViewportBuilder::default().with_icon(std::sync::Arc::new(load_icon()));
 
@@ -35,11 +46,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = eframe::run_native(
         "Redsky",
         options,
-        Box::new(|_cc| {
+        Box::new(move |_cc| {
             let (msg_tx, msg_rx) = std::sync::mpsc::channel();
             let (result_tx, result_rx) = std::sync::mpsc::channel();
 
-            let app = RedskyApp::new(msg_tx, result_tx.clone(), result_rx);
+            let app = RedskyApp::new(msg_tx, result_tx.clone(), result_rx, is_screenshot_mode, screenshot_output_path);
 
             #[cfg(target_os = "windows")]
             {

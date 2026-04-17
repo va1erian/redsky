@@ -27,6 +27,7 @@ pub struct Post {
     pub repost_count: i64,
     pub embeds: Vec<PostImage>,
     pub quoted_post: Option<Box<Post>>,
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
     pub is_reply: bool,
     pub viewer_like: Option<String>,
     pub viewer_repost: Option<String>,
@@ -73,6 +74,7 @@ impl PostImage {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum DownloadStatus {
     Scanning,
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
     Downloading,
     Finished,
     Cancelled,
@@ -188,6 +190,7 @@ pub enum RedskyUiMsg {
     ShowErrorMsg {
         error: String,
     },
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
     DownloadProgress {
         id: u64,
         processed_posts: usize,
@@ -196,6 +199,7 @@ pub enum RedskyUiMsg {
         total_images: Option<usize>,
         status: DownloadStatus,
     },
+    #[cfg_attr(feature = "mock-api", allow(dead_code))]
     DownloadFinished {
         id: u64,
         errors: Vec<String>,
@@ -296,7 +300,7 @@ pub enum BskyActorMsg {
     Close(),
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
-enum MainViewState {
+pub enum MainViewState {
     Login,
     TimelineFeed,
     OwnPostFeed,
