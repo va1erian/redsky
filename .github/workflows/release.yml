@@ -35,6 +35,7 @@ jobs:
       run: cargo build --release
 
     - name: Compress executable
+      if: runner.os != 'macOS'
       uses: crazy-max/ghaction-upx@v3
       with:
         files: |
