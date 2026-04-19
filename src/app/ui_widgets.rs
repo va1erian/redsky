@@ -306,7 +306,7 @@ impl RedskyApp {
                 egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.vertical(|ui| {
                         ui.heading("Search Accounts");
-                        if ui.text_edit_singleline(&mut self.search_query).changed() {
+                        if ui.add(egui::TextEdit::singleline(&mut self.search_query).hint_text("Search users by handle or name...")).changed() {
                             self.post_message(BskyActorMsg::SearchActors {
                                 query: self.search_query.clone(),
                             });
@@ -387,7 +387,7 @@ impl RedskyApp {
                     ui.vertical(|ui| {
                         ui.heading("Search Posts");
                         ui.horizontal(|ui| {
-                            let text_edit_response = ui.text_edit_singleline(&mut self.search_posts_query);
+                            let text_edit_response = ui.add(egui::TextEdit::singleline(&mut self.search_posts_query).hint_text("Search keywords..."));
                             let enter_pressed = text_edit_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                             if ui.button("Search").clicked() || enter_pressed {
                                 self.search_posts_results = Some(vec![]);
