@@ -509,8 +509,10 @@ impl eframe::App for RedskyApp {
                                 let mut enter_pressed = false;
                                 ui.horizontal(|ui| {
                                     let name_label = ui.label("bsky handle: ");
-                                    let resp = ui.text_edit_singleline(&mut self.login)
-                                        .labelled_by(name_label.id);
+                                    let resp = ui.add(
+                                        egui::TextEdit::singleline(&mut self.login)
+                                            .hint_text("e.g. alice.bsky.social")
+                                    ).labelled_by(name_label.id);
                                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                         enter_pressed = true;
                                     }
