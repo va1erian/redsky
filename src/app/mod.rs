@@ -509,7 +509,7 @@ impl eframe::App for RedskyApp {
                                 let mut enter_pressed = false;
                                 ui.horizontal(|ui| {
                                     let name_label = ui.label("bsky handle: ");
-                                    let resp = ui.text_edit_singleline(&mut self.login)
+                                    let resp = ui.add(egui::TextEdit::singleline(&mut self.login).hint_text("e.g. alice.bsky.social"))
                                         .labelled_by(name_label.id);
                                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                         enter_pressed = true;
@@ -518,7 +518,7 @@ impl eframe::App for RedskyApp {
                                 ui.horizontal(|ui| {
                                     let pwd_label = ui.label("password: ");
                                     let resp = ui.add(
-                                        egui::TextEdit::singleline(&mut self.pass).password(true),
+                                        egui::TextEdit::singleline(&mut self.pass).password(true).hint_text("App password"),
                                     )
                                     .labelled_by(pwd_label.id);
                                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -572,9 +572,12 @@ impl eframe::App for RedskyApp {
                             egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),
                             |ui| {
                                 ui.vertical(|ui| {
-                                    crate::app::show_autoscroll_area(ui, "notifications_scroll", false, |ui| {
-                                        for notif in &self.notifications {
-                                            ui.horizontal(|ui| {
+                                    if self.notifications.is_empty() {
+                                        ui.label("No notifications yet.");
+                                    } else {
+                                        crate::app::show_autoscroll_area(ui, "notifications_scroll", false, |ui| {
+                                            for notif in &self.notifications {
+                                                ui.horizontal(|ui| {
                                                 if !notif.author_avatar.is_empty() {
                                                     if let Some(texture) = self
                                                         .image_cache
@@ -606,23 +609,24 @@ impl eframe::App for RedskyApp {
                                                     ))
                                                     .strong(),
                                                 );
-                                                if !notif.is_read {
-                                                    ui.label(
-                                                        RichText::new("🔴 Unread")
-                                                            .color(egui::Color32::RED),
-                                                    );
-                                                }
-                                            });
-                                            ui.separator();
+                                                    if !notif.is_read {
+                                                        ui.label(
+                                                            RichText::new("🔴 Unread")
+                                                                .color(egui::Color32::RED),
+                                                        );
+                                                    }
+                                                });
+                                                ui.separator();
+                                            }
+                                        });
+                                        if ui.button("Refresh notifications").clicked() {
+                                            self.post_message(BskyActorMsg::GetNotifications { cursor: None });
                                         }
-                                    });
-                                    if ui.button("Refresh notifications").clicked() {
-                                        self.post_message(BskyActorMsg::GetNotifications { cursor: None });
-                                    }
-                                    if let Some(cursor) = self.notifications_cursor.clone() {
-                                        if ui.button("Load More").clicked() {
-                                            self.post_message(BskyActorMsg::GetNotifications { cursor: Some(cursor) });
-                                            self.notifications_cursor = None;
+                                        if let Some(cursor) = self.notifications_cursor.clone() {
+                                            if ui.button("Load More").clicked() {
+                                                self.post_message(BskyActorMsg::GetNotifications { cursor: Some(cursor) });
+                                                self.notifications_cursor = None;
+                                            }
                                         }
                                     }
                                 });
