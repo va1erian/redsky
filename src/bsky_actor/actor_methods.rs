@@ -860,6 +860,35 @@ impl BskyJob {
         Ok(RedskyUiMsg::NotifyUnreadCount { count })
     }
 
+    pub async fn get_raw_post(
+        &self,
+        post_uri: String,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        let response = self
+            .bsky_agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_posts(
+                atrium_api::app::bsky::feed::get_posts::ParametersData {
+                    uris: vec![post_uri.clone()],
+                }
+                .into(),
+            )
+            .await?;
+
+        if let Some(post_view) = response.data.posts.first() {
+            let raw_json = serde_json::to_string(post_view).unwrap_or_default();
+            Ok(RedskyUiMsg::ShowRawPostView {
+                post_uri,
+                raw_json,
+            })
+        } else {
+            Err("Post not found".into())
+        }
+    }
+
     async fn get_notifications(
         &self,
         cursor: &Option<String>,

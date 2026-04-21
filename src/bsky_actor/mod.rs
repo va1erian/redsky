@@ -134,7 +134,6 @@ fn extract_quote_reply(post_view: &Object<PostViewData>) -> Option<Post> {
                 viewer_like: None,
                 viewer_repost: None,
                 thread_root: None,
-                raw_json: serde_json::to_string(&view_record).unwrap_or_default(),
             })
         } else {
             None
@@ -197,7 +196,6 @@ fn extract_post(post_view: &Object<PostViewData>) -> Option<Post> {
                 cid: reply.root.cid.clone(),
             })
         }),
-        raw_json: serde_json::to_string(&post_view).unwrap_or_default(),
     })
 }
 #[cfg_attr(feature = "mock-api", allow(dead_code))]
@@ -254,6 +252,7 @@ impl BskyJob {
             }
             BskyActorMsg::GetUnreadCount() => self.get_unread_count().await,
             BskyActorMsg::GetNotifications { cursor } => self.get_notifications(cursor).await,
+            BskyActorMsg::GetRawPost { post_uri } => self.get_raw_post(post_uri.clone()).await,
             BskyActorMsg::Close() => {
                 panic!("unexpected message");
             }
