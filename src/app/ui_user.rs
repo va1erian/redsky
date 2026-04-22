@@ -169,11 +169,31 @@ impl RedskyApp {
                                         }
                                     }
                                     Some(None) => {
-                                        ui.spinner();
+                                        let (rect, _) = ui.allocate_exact_size(
+                                            egui::vec2(current_size, current_size),
+                                            egui::Sense::hover(),
+                                        );
+                                        if ui.is_rect_visible(rect) {
+                                            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                                                ui.centered_and_justified(|ui| {
+                                                    ui.spinner();
+                                                });
+                                            });
+                                        }
                                     }
                                     None => {
                                         self.request_image(&embed.thumbnail_url);
-                                        ui.spinner();
+                                        let (rect, _) = ui.allocate_exact_size(
+                                            egui::vec2(current_size, current_size),
+                                            egui::Sense::hover(),
+                                        );
+                                        if ui.is_rect_visible(rect) {
+                                            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                                                ui.centered_and_justified(|ui| {
+                                                    ui.spinner();
+                                                });
+                                            });
+                                        }
                                     }
                                 }
                             }
