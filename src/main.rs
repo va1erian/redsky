@@ -35,7 +35,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if arg == "--test-screenshot" {
             is_screenshot_mode = true;
         } else if arg.starts_with("--test-screenshot-output=") {
-            screenshot_output_path = Some(arg.trim_start_matches("--test-screenshot-output=").to_string());
+            screenshot_output_path = Some(
+                arg.trim_start_matches("--test-screenshot-output=")
+                    .to_string(),
+            );
         }
     }
 
@@ -50,7 +53,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let (msg_tx, msg_rx) = std::sync::mpsc::channel();
             let (result_tx, result_rx) = std::sync::mpsc::channel();
 
-            let app = RedskyApp::new(msg_tx, result_tx.clone(), result_rx, is_screenshot_mode, screenshot_output_path);
+            let app = RedskyApp::new(
+                msg_tx,
+                result_tx.clone(),
+                result_rx,
+                is_screenshot_mode,
+                screenshot_output_path,
+            );
 
             #[cfg(target_os = "windows")]
             {

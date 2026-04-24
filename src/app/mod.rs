@@ -27,7 +27,11 @@ pub fn show_autoscroll_area<R>(
                 let dy = pos.y - o.y;
                 let dx = pos.x - o.x;
                 let scroll_dy = if dy.abs() > 10.0 { -dy * 0.1 } else { 0.0 };
-                let scroll_dx = if both_directions && dx.abs() > 10.0 { -dx * 0.1 } else { 0.0 };
+                let scroll_dx = if both_directions && dx.abs() > 10.0 {
+                    -dx * 0.1
+                } else {
+                    0.0
+                };
                 if scroll_dy != 0.0 || scroll_dx != 0.0 {
                     ui.scroll_with_delta(egui::vec2(scroll_dx, scroll_dy));
                     ui.ctx().request_repaint();
@@ -62,10 +66,14 @@ pub fn show_autoscroll_area<R>(
     }
 
     if let Some(o) = origin {
-         let painter = ui.ctx().debug_painter();
-         painter.circle_filled(o, 4.0, egui::Color32::from_black_alpha(128));
-         painter.circle_stroke(o, 6.0, egui::Stroke::new(1.0, egui::Color32::from_white_alpha(128)));
-         ui.ctx().set_cursor_icon(egui::CursorIcon::AllScroll);
+        let painter = ui.ctx().debug_painter();
+        painter.circle_filled(o, 4.0, egui::Color32::from_black_alpha(128));
+        painter.circle_stroke(
+            o,
+            6.0,
+            egui::Stroke::new(1.0, egui::Color32::from_white_alpha(128)),
+        );
+        ui.ctx().set_cursor_icon(egui::CursorIcon::AllScroll);
     }
 
     ui.data_mut(|d| d.insert_temp(id, origin));
@@ -166,42 +174,53 @@ impl RedskyApp {
         if is_screenshot_mode {
             is_logged_in = true;
             main_view_state = MainViewState::TimelineFeed;
-            timeline.push(FeedItem::Full(Post {
-                uri: "at://mock-uri".to_string(),
-                cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap(),
-                content: "Hello, world! This is a mock post for the screenshot test.".to_string(),
-                author: "mockuser.bsky.social".to_string(),
-                display_name: "Mock User".to_string(),
-                avatar_img: "".to_string(),
-                date: "2024-01-01T00:00:00Z".to_string(),
-                like_count: 42,
-                repost_count: 7,
-                embeds: vec![],
-                quoted_post: None,
-                is_reply: false,
-                viewer_like: None,
-                viewer_repost: None,
-                thread_root: None,
-                raw_json: "{}".to_string(),
-            }, None));
-            timeline.push(FeedItem::Full(Post {
-                uri: "at://mock-uri-2".to_string(),
-                cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m".parse().unwrap(),
-                content: "Another mock post right here.".to_string(),
-                author: "anotheruser.bsky.social".to_string(),
-                display_name: "Another User".to_string(),
-                avatar_img: "".to_string(),
-                date: "2024-01-01T00:05:00Z".to_string(),
-                like_count: 100,
-                repost_count: 20,
-                embeds: vec![],
-                quoted_post: None,
-                is_reply: false,
-                viewer_like: None,
-                viewer_repost: None,
-                thread_root: None,
-                raw_json: "{}".to_string(),
-            }, None));
+            timeline.push(FeedItem::Full(
+                Post {
+                    uri: "at://mock-uri".to_string(),
+                    cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m"
+                        .parse()
+                        .unwrap(),
+                    content: "Hello, world! This is a mock post for the screenshot test."
+                        .to_string(),
+                    author: "mockuser.bsky.social".to_string(),
+                    display_name: "Mock User".to_string(),
+                    avatar_img: "".to_string(),
+                    date: "2024-01-01T00:00:00Z".to_string(),
+                    like_count: 42,
+                    repost_count: 7,
+                    embeds: vec![],
+                    quoted_post: None,
+                    is_reply: false,
+                    viewer_like: None,
+                    viewer_repost: None,
+                    thread_root: None,
+                    raw_json: "{}".to_string(),
+                },
+                None,
+            ));
+            timeline.push(FeedItem::Full(
+                Post {
+                    uri: "at://mock-uri-2".to_string(),
+                    cid: "bafyreidfzuflltehrwqx5dzlqg3vzd2q6fudx75h7m3e7y22qpxg3ntv6m"
+                        .parse()
+                        .unwrap(),
+                    content: "Another mock post right here.".to_string(),
+                    author: "anotheruser.bsky.social".to_string(),
+                    display_name: "Another User".to_string(),
+                    avatar_img: "".to_string(),
+                    date: "2024-01-01T00:05:00Z".to_string(),
+                    like_count: 100,
+                    repost_count: 20,
+                    embeds: vec![],
+                    quoted_post: None,
+                    is_reply: false,
+                    viewer_like: None,
+                    viewer_repost: None,
+                    thread_root: None,
+                    raw_json: "{}".to_string(),
+                },
+                None,
+            ));
             let _ = tx.send(BskyActorMsg::GetUnreadCount());
         }
 
@@ -391,14 +410,18 @@ impl eframe::App for RedskyApp {
         for ev in ctx.input(|i| i.events.clone()) {
             if let egui::Event::Screenshot { image, .. } = ev {
                 let pixels: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
-                let output_path = self.screenshot_output_path.as_deref().unwrap_or("screenshot.png");
+                let output_path = self
+                    .screenshot_output_path
+                    .as_deref()
+                    .unwrap_or("screenshot.png");
                 image::save_buffer(
                     output_path,
                     &pixels,
                     image.size[0] as u32,
                     image.size[1] as u32,
                     image::ColorType::Rgba8,
-                ).expect("Failed to save screenshot");
+                )
+                .expect("Failed to save screenshot");
 
                 std::process::exit(0);
             }
@@ -509,19 +532,29 @@ impl eframe::App for RedskyApp {
                                 let mut enter_pressed = false;
                                 ui.horizontal(|ui| {
                                     let name_label = ui.label("bsky handle: ");
-                                    let resp = ui.text_edit_singleline(&mut self.login)
+                                    let resp = ui
+                                        .add(
+                                            egui::TextEdit::singleline(&mut self.login)
+                                                .hint_text("e.g. alice.bsky.social"),
+                                        )
                                         .labelled_by(name_label.id);
-                                    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                    if resp.lost_focus()
+                                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                                    {
                                         enter_pressed = true;
                                     }
                                 });
                                 ui.horizontal(|ui| {
                                     let pwd_label = ui.label("password: ");
-                                    let resp = ui.add(
-                                        egui::TextEdit::singleline(&mut self.pass).password(true),
-                                    )
-                                    .labelled_by(pwd_label.id);
-                                    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                    let resp = ui
+                                        .add(
+                                            egui::TextEdit::singleline(&mut self.pass)
+                                                .password(true),
+                                        )
+                                        .labelled_by(pwd_label.id);
+                                    if resp.lost_focus()
+                                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                                    {
                                         enter_pressed = true;
                                     }
                                 });
@@ -557,9 +590,8 @@ impl eframe::App for RedskyApp {
                                     // Bookmarks also needs to use FeedItem if I want to use make_post_view
                                     // or I should convert them.
                                     // In this patch I'll convert them for simplicity as a first step.
-                                    let mut bookmark_items = crate::app::into_feed_items(
-                                        self.bookmarks.iter().cloned()
-                                    );
+                                    let mut bookmark_items =
+                                        crate::app::into_feed_items(self.bookmarks.iter().cloned());
                                     self.make_post_view(ui, "Your bookmarks", &mut bookmark_items);
                                     // Note: changes to bookmark_items (like dehydration) won't persist back to self.bookmarks
                                     // this way. Ideally bookmarks should also be Vec<FeedItem>.
@@ -572,56 +604,65 @@ impl eframe::App for RedskyApp {
                             egui::Layout::left_to_right(egui::Align::TOP).with_main_justify(true),
                             |ui| {
                                 ui.vertical(|ui| {
-                                    crate::app::show_autoscroll_area(ui, "notifications_scroll", false, |ui| {
-                                        for notif in &self.notifications {
-                                            ui.horizontal(|ui| {
-                                                if !notif.author_avatar.is_empty() {
-                                                    if let Some(texture) = self
-                                                        .image_cache
-                                                        .get(&notif.author_avatar)
-                                                        .unwrap_or(&None)
-                                                    {
-                                                        ui.add(
-                                                            egui::Image::new(texture)
-                                                                .max_width(24.0)
-                                                                .max_height(24.0),
-                                                        );
-                                                    } else {
-                                                        ui.spinner();
+                                    crate::app::show_autoscroll_area(
+                                        ui,
+                                        "notifications_scroll",
+                                        false,
+                                        |ui| {
+                                            for notif in &self.notifications {
+                                                ui.horizontal(|ui| {
+                                                    if !notif.author_avatar.is_empty() {
+                                                        if let Some(texture) = self
+                                                            .image_cache
+                                                            .get(&notif.author_avatar)
+                                                            .unwrap_or(&None)
+                                                        {
+                                                            ui.add(
+                                                                egui::Image::new(texture)
+                                                                    .max_width(24.0)
+                                                                    .max_height(24.0),
+                                                            );
+                                                        } else {
+                                                            ui.spinner();
+                                                        }
                                                     }
-                                                }
-                                                let action_text = match notif.reason.as_str() {
-                                                    "like" => "liked your post",
-                                                    "repost" => "reposted your post",
-                                                    "follow" => "followed you",
-                                                    "mention" => "mentioned you",
-                                                    "reply" => "replied to your post",
-                                                    "quote" => "quoted your post",
-                                                    _ => &notif.reason,
-                                                };
-                                                ui.label(
-                                                    RichText::new(format!(
-                                                        "@{} {}",
-                                                        notif.author, action_text
-                                                    ))
-                                                    .strong(),
-                                                );
-                                                if !notif.is_read {
+                                                    let action_text = match notif.reason.as_str() {
+                                                        "like" => "liked your post",
+                                                        "repost" => "reposted your post",
+                                                        "follow" => "followed you",
+                                                        "mention" => "mentioned you",
+                                                        "reply" => "replied to your post",
+                                                        "quote" => "quoted your post",
+                                                        _ => &notif.reason,
+                                                    };
                                                     ui.label(
-                                                        RichText::new("🔴 Unread")
-                                                            .color(egui::Color32::RED),
+                                                        RichText::new(format!(
+                                                            "@{} {}",
+                                                            notif.author, action_text
+                                                        ))
+                                                        .strong(),
                                                     );
-                                                }
-                                            });
-                                            ui.separator();
-                                        }
-                                    });
+                                                    if !notif.is_read {
+                                                        ui.label(
+                                                            RichText::new("🔴 Unread")
+                                                                .color(egui::Color32::RED),
+                                                        );
+                                                    }
+                                                });
+                                                ui.separator();
+                                            }
+                                        },
+                                    );
                                     if ui.button("Refresh notifications").clicked() {
-                                        self.post_message(BskyActorMsg::GetNotifications { cursor: None });
+                                        self.post_message(BskyActorMsg::GetNotifications {
+                                            cursor: None,
+                                        });
                                     }
                                     if let Some(cursor) = self.notifications_cursor.clone() {
                                         if ui.button("Load More").clicked() {
-                                            self.post_message(BskyActorMsg::GetNotifications { cursor: Some(cursor) });
+                                            self.post_message(BskyActorMsg::GetNotifications {
+                                                cursor: Some(cursor),
+                                            });
                                             self.notifications_cursor = None;
                                         }
                                     }
@@ -632,8 +673,14 @@ impl eframe::App for RedskyApp {
                     MainViewState::OwnPostFeed => {
                         let login = self.login.clone();
                         let mut maybe_post = self.user_posts.get_mut(&login).and_then(|p| p.take());
-                        let mut maybe_likes = self.user_likes_posts.get_mut(&login).and_then(|p| p.take());
-                        self.make_maybe_user_post_view(ui, &login, &mut maybe_post, &mut maybe_likes);
+                        let mut maybe_likes =
+                            self.user_likes_posts.get_mut(&login).and_then(|p| p.take());
+                        self.make_maybe_user_post_view(
+                            ui,
+                            &login,
+                            &mut maybe_post,
+                            &mut maybe_likes,
+                        );
                         self.user_posts.insert(login.clone(), maybe_post);
                         self.user_likes_posts.insert(login, maybe_likes);
                     }
