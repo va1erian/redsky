@@ -16,9 +16,9 @@ use atrium_api::app::bsky::feed::defs::ThreadViewPostRepliesItem;
 #[cfg(not(feature = "mock-api"))]
 use atrium_api::app::bsky::feed::get_post_thread::OutputThreadRefs;
 use atrium_api::app::bsky::feed::post;
+use atrium_api::types::string::Cid;
 #[cfg(not(feature = "mock-api"))]
 use atrium_api::types::string::{AtIdentifier, Datetime, RecordKey};
-use atrium_api::types::string::Cid;
 use atrium_api::types::Object;
 use atrium_api::types::TryFromUnknown;
 use atrium_api::types::Union;
@@ -214,9 +214,15 @@ impl BskyJob {
     pub async fn perform(self) -> () {
         let result = match &self.job {
             BskyActorMsg::Login { login, pass } => self.login(login, pass).await,
-            BskyActorMsg::Post { msg_body, image_paths, reply_to } => self.post(msg_body, image_paths, reply_to).await,
+            BskyActorMsg::Post {
+                msg_body,
+                image_paths,
+                reply_to,
+            } => self.post(msg_body, image_paths, reply_to).await,
             BskyActorMsg::GetPostAndReplies { post_ref } => self.get_post_thread(post_ref).await,
-            BskyActorMsg::GetPostLikers { post_ref, cursor } => self.get_post_likers(post_ref, cursor).await,
+            BskyActorMsg::GetPostLikers { post_ref, cursor } => {
+                self.get_post_likers(post_ref, cursor).await
+            }
             BskyActorMsg::GetPostRepostedBy { post_ref, cursor } => {
                 self.get_post_reposted_by(post_ref, cursor).await
             }
@@ -225,7 +231,9 @@ impl BskyJob {
                 post_uri,
                 like_record_uri,
             } => self.unlike(post_uri.clone(), like_record_uri.clone()).await,
-            BskyActorMsg::DeletePost { post_uri, post_cid } => self.delete_post(post_uri.clone(), post_cid.clone()).await,
+            BskyActorMsg::DeletePost { post_uri, post_cid } => {
+                self.delete_post(post_uri.clone(), post_cid.clone()).await
+            }
             BskyActorMsg::Repost { post_ref } => self.repost(post_ref.clone()).await,
             BskyActorMsg::Unrepost {
                 post_uri,
