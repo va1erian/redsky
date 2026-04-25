@@ -32,7 +32,6 @@ pub struct Post {
     pub viewer_like: Option<String>,
     pub viewer_repost: Option<String>,
     pub thread_root: Option<StrongRef>,
-    pub raw_json: String,
 }
 pub enum FeedItem {
     Full(Post, Option<f32>),
@@ -292,6 +291,9 @@ pub enum BskyActorMsg {
     SearchPosts {
         query: String,
         cursor: Option<String>,
+    },
+    GetRawPost {
+        post_uri: String,
     },
     LoadImage {
         url: String,

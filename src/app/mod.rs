@@ -52,14 +52,13 @@ pub fn show_autoscroll_area<R>(
         }
     }
 
-    if origin.is_some() {
-        if ui.input(|i| {
+    if origin.is_some()
+        && ui.input(|i| {
             i.pointer.button_pressed(egui::PointerButton::Primary)
                 || i.pointer.button_pressed(egui::PointerButton::Secondary)
         }) {
             origin = None;
         }
-    }
 
     if let Some(o) = origin {
          let painter = ui.ctx().debug_painter();
@@ -182,7 +181,6 @@ impl RedskyApp {
                 viewer_like: None,
                 viewer_repost: None,
                 thread_root: None,
-                raw_json: "{}".to_string(),
             }, None));
             timeline.push(FeedItem::Full(Post {
                 uri: "at://mock-uri-2".to_string(),
@@ -200,7 +198,6 @@ impl RedskyApp {
                 viewer_like: None,
                 viewer_repost: None,
                 thread_root: None,
-                raw_json: "{}".to_string(),
             }, None));
             let _ = tx.send(BskyActorMsg::GetUnreadCount());
         }
