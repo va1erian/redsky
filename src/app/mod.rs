@@ -509,7 +509,7 @@ impl eframe::App for RedskyApp {
                                 let mut enter_pressed = false;
                                 ui.horizontal(|ui| {
                                     let name_label = ui.label("bsky handle: ");
-                                    let resp = ui.text_edit_singleline(&mut self.login)
+                                    let resp = ui.add(egui::TextEdit::singleline(&mut self.login).hint_text("e.g. user.bsky.social"))
                                         .labelled_by(name_label.id);
                                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                         enter_pressed = true;
@@ -518,7 +518,7 @@ impl eframe::App for RedskyApp {
                                 ui.horizontal(|ui| {
                                     let pwd_label = ui.label("password: ");
                                     let resp = ui.add(
-                                        egui::TextEdit::singleline(&mut self.pass).password(true),
+                                        egui::TextEdit::singleline(&mut self.pass).password(true).hint_text("App password"),
                                     )
                                     .labelled_by(pwd_label.id);
                                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
