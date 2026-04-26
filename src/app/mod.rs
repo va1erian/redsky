@@ -509,8 +509,10 @@ impl eframe::App for RedskyApp {
                                 let mut enter_pressed = false;
                                 ui.horizontal(|ui| {
                                     let name_label = ui.label("bsky handle: ");
-                                    let resp = ui.text_edit_singleline(&mut self.login)
-                                        .labelled_by(name_label.id);
+                                    let resp = ui.add(
+                                        egui::TextEdit::singleline(&mut self.login).hint_text("e.g. alice.bsky.social")
+                                    )
+                                    .labelled_by(name_label.id);
                                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                         enter_pressed = true;
                                     }
@@ -518,7 +520,7 @@ impl eframe::App for RedskyApp {
                                 ui.horizontal(|ui| {
                                     let pwd_label = ui.label("password: ");
                                     let resp = ui.add(
-                                        egui::TextEdit::singleline(&mut self.pass).password(true),
+                                        egui::TextEdit::singleline(&mut self.pass).password(true).hint_text("App Password")
                                     )
                                     .labelled_by(pwd_label.id);
                                     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -527,7 +529,7 @@ impl eframe::App for RedskyApp {
                                 });
                                 ui.checkbox(&mut self.remember_me, "Remember me");
                                 ui.horizontal(|ui| {
-                                    if ui.button("login").clicked() || enter_pressed {
+                                    if ui.button("login").on_hover_text("Login (Enter)").clicked() || enter_pressed {
                                         self.post_message(BskyActorMsg::Login {
                                             login: self.login.to_string(),
                                             pass: self.pass.to_string(),
