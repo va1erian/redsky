@@ -241,11 +241,15 @@ impl RedskyApp {
                                     egui::vec2(ui.available_width(), h),
                                     egui::Sense::hover(),
                                 );
-                                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                                    ui.centered_and_justified(|ui| {
-                                        ui.spinner();
+                                // ⚡ Bolt: Only render spinners for visible dehydrated items to prevent
+                                // constant 60 FPS repaints from off-screen animations, significantly reducing idle CPU usage.
+                                if ui.is_rect_visible(rect) {
+                                    ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                                        ui.centered_and_justified(|ui| {
+                                            ui.spinner();
+                                        });
                                     });
-                                });
+                                }
                             }
                         }
 

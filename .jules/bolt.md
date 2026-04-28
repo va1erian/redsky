@@ -1,3 +1,6 @@
 ## 2024-05-18 - [Performance] Defer pretty-printing of raw JSON to UI on demand
 **Learning:** In an immediate mode GUI framework like egui, putting expensive operations like `serde_json::from_str` or `to_string_pretty` inside the render loop causes catastrophic performance issues because it runs every frame. The initial attempt to fix a performance issue by offloading work to the UI layer resulted in a major regression.
 **Action:** When shifting work from the background data processing layer (e.g., parsing feed posts) to the UI layer, always ensure the expensive work is done exactly once in the event/message handler and the result is cached in the application state. Never do the parsing/formatting directly inside the egui `show` closure.
+## 2026-04-28 - [Performance] Prevent off-screen animations from causing constant repaints
+**Learning:** In egui, rendering an animated element like `ui.spinner()` automatically requests a repaint for the next frame. If this element is rendered within a dehydrated/off-screen item in a long scrollable list, it causes the UI to constantly repaint at 60 FPS, resulting in high idle CPU usage even when nothing visible is happening.
+**Action:** Always check `ui.is_rect_visible(rect)` using the item's allocated rect before rendering any animated element (like spinners) in a long list to cull off-screen animations.
