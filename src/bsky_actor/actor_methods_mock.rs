@@ -99,7 +99,6 @@ impl BskyJob {
             viewer_like: None,
             viewer_repost: None,
             thread_root: None,
-            raw_json: "{}".to_string(),
         };
         let reply = Post {
             uri: "at://mock-reply-uri".to_string(),
@@ -117,7 +116,6 @@ impl BskyJob {
             viewer_like: None,
             viewer_repost: None,
             thread_root: Some(strong_ref.clone()),
-            raw_json: "{}".to_string(),
         };
         Ok(RedskyUiMsg::NotifyPostAndRepliesLoaded {
             post,
@@ -269,5 +267,12 @@ impl BskyJob {
         _post_cid: Cid,
     ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
         Ok(RedskyUiMsg::ActionSucceeded())
+    }
+
+    async fn get_raw_post(&self, post_uri: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(RedskyUiMsg::ShowRawPostView {
+            post_uri: post_uri.clone(),
+            raw_json: "{}".to_string(),
+        })
     }
 }

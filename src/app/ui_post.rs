@@ -214,9 +214,8 @@ impl RedskyApp {
                                                 ui.close();
                                             }
                                             if ui.button("Raw View").clicked() {
-                                                self.post_ui_message(RedskyUiMsg::ShowRawPostView {
+                                                self.post_message(BskyActorMsg::GetRawPost {
                                                     post_uri: post.uri.clone(),
-                                                    raw_json: post.raw_json.clone(),
                                                 });
                                                 ui.close();
                                             }

@@ -1,3 +1,6 @@
 ## 2024-05-18 - [Performance] Defer pretty-printing of raw JSON to UI on demand
 **Learning:** In an immediate mode GUI framework like egui, putting expensive operations like `serde_json::from_str` or `to_string_pretty` inside the render loop causes catastrophic performance issues because it runs every frame. The initial attempt to fix a performance issue by offloading work to the UI layer resulted in a major regression.
 **Action:** When shifting work from the background data processing layer (e.g., parsing feed posts) to the UI layer, always ensure the expensive work is done exactly once in the event/message handler and the result is cached in the application state. Never do the parsing/formatting directly inside the egui `show` closure.
+## 2024-05-19 - [Performance] Defer raw API serialization to on-demand requests
+**Learning:** Eagerly calling `serde_json::to_string` on API response structs (like `PostViewData`) in the background layer for every post fetched creates unnecessary CPU and memory overhead, especially for long lists like timelines or searches, even if the result isn't immediately rendered.
+**Action:** Remove eagerly populated string representations from core structs. Instead, add targeted asynchronous background messages (e.g., `BskyActorMsg::GetRawPost`) to fetch or serialize the data strictly on demand when requested by the UI layer.

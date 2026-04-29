@@ -901,4 +901,30 @@ impl BskyJob {
             append: cursor.is_some(),
         })
     }
+
+    async fn get_raw_post(&self, post_uri: &String) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        let response = self
+            .bsky_agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_posts(
+                atrium_api::app::bsky::feed::get_posts::ParametersData {
+                    uris: vec![post_uri.clone()],
+                }
+                .into(),
+            )
+            .await?;
+
+        if let Some(post) = response.data.posts.first() {
+            let raw_json = serde_json::to_string(&post).unwrap_or_default();
+            Ok(RedskyUiMsg::ShowRawPostView {
+                post_uri: post_uri.clone(),
+                raw_json,
+            })
+        } else {
+            Err("Post not found".into())
+        }
+    }
 }
