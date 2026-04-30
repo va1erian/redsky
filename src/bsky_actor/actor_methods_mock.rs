@@ -79,6 +79,16 @@ impl BskyJob {
         Ok(RedskyUiMsg::ActionSucceeded())
     }
 
+    async fn get_raw_post(
+        &self,
+        post_uri: &str,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(RedskyUiMsg::ShowRawPostView {
+            post_uri: post_uri.to_string(),
+            raw_json: "{}".to_string(),
+        })
+    }
+
     async fn get_post_thread(
         &self,
         strong_ref: &StrongRef,

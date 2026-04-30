@@ -213,10 +213,11 @@ impl RedskyApp {
                                                 });
                                                 ui.close();
                                             }
+                                            // Request raw post on demand to optimize performance
+                                            // by skipping parsing on the critical path.
                                             if ui.button("Raw View").clicked() {
-                                                self.post_ui_message(RedskyUiMsg::ShowRawPostView {
+                                                self.post_message(BskyActorMsg::GetRawPost {
                                                     post_uri: post.uri.clone(),
-                                                    raw_json: post.raw_json.clone(),
                                                 });
                                                 ui.close();
                                             }

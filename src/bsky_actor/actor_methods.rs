@@ -248,6 +248,40 @@ impl BskyJob {
         Ok(RedskyUiMsg::ActionSucceeded())
     }
 
+    // Lazy load the raw JSON view. This is a performance optimization over the
+    // previous approach of serializing every post to a string on the main thread,
+    // trading some background memory/CPU time for an extra network request
+    // when a user requests "Raw View".
+    async fn get_raw_post(
+        &self,
+        post_uri: &str,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        let response = self
+            .bsky_agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_posts(
+                atrium_api::app::bsky::feed::get_posts::ParametersData {
+                    uris: vec![post_uri.to_string()],
+                }
+                .into(),
+            )
+            .await?;
+
+        let raw_json = if let Some(post_view) = response.data.posts.first() {
+            serde_json::to_string_pretty(&post_view).unwrap_or_else(|_| "{}".to_string())
+        } else {
+            "{}".to_string()
+        };
+
+        Ok(RedskyUiMsg::ShowRawPostView {
+            post_uri: post_uri.to_string(),
+            raw_json,
+        })
+    }
+
     async fn get_post_thread(
         &self,
         strong_ref: &StrongRef,
