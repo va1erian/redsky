@@ -99,7 +99,6 @@ impl BskyJob {
             viewer_like: None,
             viewer_repost: None,
             thread_root: None,
-            raw_json: "{}".to_string(),
         };
         let reply = Post {
             uri: "at://mock-reply-uri".to_string(),
@@ -117,7 +116,6 @@ impl BskyJob {
             viewer_like: None,
             viewer_repost: None,
             thread_root: Some(strong_ref.clone()),
-            raw_json: "{}".to_string(),
         };
         Ok(RedskyUiMsg::NotifyPostAndRepliesLoaded {
             post,
