@@ -125,6 +125,16 @@ impl BskyJob {
         })
     }
 
+    async fn get_raw_post(
+        &self,
+        post_uri: String,
+    ) -> Result<RedskyUiMsg, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(RedskyUiMsg::ShowRawPostView {
+            post_uri,
+            raw_json: "{}".to_string(),
+        })
+    }
+
     async fn search_posts(
         &self,
         _query: &String,
