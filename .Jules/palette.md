@@ -5,3 +5,6 @@
 ## 2024-05-24 - Form Submission Keyboard Shortcuts
 **Learning:** Keyboard-only users expect forms to be submittable via standard shortcuts (`Enter` for single-line forms like Login, `Cmd/Ctrl+Enter` for multi-line inputs like New Post). Without this, users must rely on mouse/tabbing to reach submit buttons.
 **Action:** Always add keyboard event listeners `(ui.input(|i| i.key_pressed(egui::Key::Enter)))` or `(ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter)))` to forms, and add explicit tooltip hints for non-standard shortcuts.
+## 2024-05-24 - TextEdit Placeholder Hints
+**Learning:** `egui::TextEdit` does not provide an intuitive `.hint_text(...)` directly from shorthand methods like `ui.text_edit_singleline(...)`. Users often face empty input boxes without knowing what to search for.
+**Action:** Replace `ui.text_edit_singleline(...)` with `ui.add(egui::TextEdit::singleline(...).hint_text(...))` when a placeholder hint is necessary to guide the user's intent, such as in search bars.
